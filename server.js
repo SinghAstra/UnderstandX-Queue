@@ -1,7 +1,10 @@
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-require("dotenv").config();
+import bodyParser from "body-parser";
+import cors from "cors";
+import dotenv from "dotenv";
+import express from "express";
+import userRoutes from "./routes/user.routes.js";
+
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,6 +18,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.get("/", (req, res) => {
   res.send("Welcome to SemanticX API");
 });
+app.use("/api/users", userRoutes);
 
 // Start server
 app.listen(port, () => {
