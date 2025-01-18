@@ -2,7 +2,8 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import userRoutes from "./routes/user.routes.js";
+import { verifyToken } from "./middleware/auth.middleware.js";
+import repositoryRoutes from "./routes/repository.routes.js";
 
 dotenv.config();
 
@@ -18,7 +19,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.get("/", (req, res) => {
   res.send("Welcome to SemanticX API");
 });
-app.use("/api/users", userRoutes);
+app.use("/api/repository", verifyToken, repositoryRoutes);
 
 // Start server
 app.listen(port, () => {
