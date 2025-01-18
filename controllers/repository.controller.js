@@ -3,6 +3,17 @@ import { batchGenerateEmbeddings } from "../utils/gemini.js";
 import { fetchGitHubRepoData } from "../utils/github.js";
 import { processFilesIntoChunks } from "../utils/repository.js";
 
+const clients = new Map();
+
+// Helper function to send SSE updates
+export function sendSSEUpdate(repositoryId, data) {
+  console.log(data);
+  const repositoryClients = clients.get(repositoryId) || [];
+  repositoryClients.forEach((client) => {
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+}
+
 export const repoProcessingController = (req, res) => {
   console.log("In repoProcessingController.");
   try {
@@ -26,40 +37,13 @@ export const repoProcessingController = (req, res) => {
   }
 };
 
-// export const streamProcessingController = (req, res) => {
-//   const repositoryId = req.params.id;
-
-//   // Set headers for SSE
-//   res.setHeader("Content-Type", "text/event-stream");
-//   res.setHeader("Cache-Control", "no-cache");
-//   res.setHeader("Connection", "keep-alive");
-
-//   // Add this client to the clients map
-//   const repositoryClients = clients.get(repositoryId) || [];
-//   clients.set(repositoryId, [...repositoryClients, res]);
-
-//   // Send initial message
-//   res.write(`data: ${JSON.stringify({ status: "connected" })}\n\n`);
-
-//   // Keep connection alive
-//   const keepAlive = setInterval(() => {
-//     res.write(": keepalive\n\n");
-//   }, 30000);
-
-//   // Clean up on client disconnect
-//   req.on("close", () => {
-//     clearInterval(keepAlive);
-//     const clients_ = clients.get(repositoryId) || [];
-//     clients.set(
-//       repositoryId,
-//       clients_.filter((client) => client !== res)
-//     );
-//   });
-// };
-
 async function processRepositoryInBackground(repositoryId, githubUrl) {
   try {
     console.log("in processRepositoryInBackground");
+    sendSSEUpdate(repositoryId, {
+      status: "PROCESSING",
+      message: "Fetching repository details",
+    });
     // 1. Fetch repository details
     const repository = await prisma.repository.findUnique({
       where: { id: repositoryId },
@@ -70,14 +54,27 @@ async function processRepositoryInBackground(repositoryId, githubUrl) {
       throw new Error("Repository not found");
     }
 
+    sendSSEUpdate(repositoryId, {
+      status: "PROCESSING",
+      message: "Fetching files from GitHub",
+    });
     // 3. Fetch GitHub repo files
     const repoData = await fetchGitHubRepoData(githubUrl, false);
+
+    sendSSEUpdate(repositoryId, {
+      status: "PROCESSING",
+      message: "Fetched all files from GitHub",
+    });
 
     console.log("repoData is fetched");
     // 4. Process files into chunks
 
     const chunks = await processFilesIntoChunks(repoData.files);
     console.log("chunks are processed");
+    sendSSEUpdate(repositoryId, {
+      status: "PROCESSING",
+      message: "Generated Chunks From the File",
+    });
 
     // 5. Save chunks to database
     await prisma.repositoryChunk.createMany({
@@ -124,13 +121,19 @@ async function processRepositoryInBackground(repositoryId, githubUrl) {
       );
     }
 
+    sendSSEUpdate(repositoryId, {
+      status: "PROCESSING",
+      message: "Generated Embedding From the Chunks...",
+    });
+
     // 7. Update final status
     console.log("Success");
+    await updateStatus(repositoryId, "SUCCESS");
   } catch (error) {
     console.error("Background processing error:", error);
-    await updateStatus(repositoryId, "ERROR");
+    await updateStatus(repositoryId, "FAILED");
     sendSSEUpdate(repositoryId, {
-      status: "ERROR",
+      status: "FAILED",
       message: error instanceof Error ? error.message : "Processing failed",
     });
   }
@@ -142,3 +145,34 @@ async function updateStatus(repositoryId, status) {
     data: { status },
   });
 }
+
+export const streamProcessingController = (req, res) => {
+  const repositoryId = req.params.id;
+
+  // Set headers for SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  // Add this client to the clients map
+  const repositoryClients = clients.get(repositoryId) || [];
+  clients.set(repositoryId, [...repositoryClients, res]);
+
+  console.log("Client has been added to map");
+
+  // Keep connection alive
+  const keepAlive = setInterval(() => {
+    res.write(": keepalive\n\n");
+  }, 30000);
+
+  // Clean up on client disconnect
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    const clients_ = clients.get(repositoryId) || [];
+    clients.set(
+      repositoryId,
+      clients_.filter((client) => client !== res)
+    );
+  });
+};

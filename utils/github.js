@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import { sendSSEUpdate } from "../controllers/repository.controller.js";
 
 const octokit = new Octokit({
   auth: process.env.GITHUB_ACCESS_TOKEN,
@@ -69,7 +70,7 @@ export async function fetchGitHubRepoMetaData(owner, repo) {
   };
 }
 
-export async function fetchGitHubRepoData(url, isPrivate) {
+export async function fetchGitHubRepoData(url, isPrivate, repositoryId) {
   const { owner, repo, isValid } = parseGithubUrl(url);
   console.log("isPrivate --fetchGitHubRepoData is ", isPrivate);
 
@@ -87,7 +88,8 @@ export async function fetchGitHubRepoData(url, isPrivate) {
   const files = await fetchRepositoryContent(
     owner,
     repo,
-    repoData.default_branch
+    repoData.default_branch,
+    repositoryId
   );
 
   console.log("files.length --fetchRepositoryContent is ", files.length);
@@ -98,7 +100,13 @@ export async function fetchGitHubRepoData(url, isPrivate) {
   };
 }
 
-async function fetchRepositoryContent(owner, repo, branch, path = "") {
+async function fetchRepositoryContent(
+  owner,
+  repo,
+  branch,
+  path = "",
+  repositoryId
+) {
   const files = [];
 
   try {
@@ -126,6 +134,11 @@ async function fetchRepositoryContent(owner, repo, branch, path = "") {
             content: Buffer.from(fileData.content, "base64").toString("utf-8"),
             type: getFileType(item.name),
           });
+
+          sendSSEUpdate(repositoryId, {
+            status: "PROCESSING",
+            message: `Successfully processed file: ${item.path}`,
+          });
         }
       } else if (item.type === "dir") {
         const subFiles = await fetchRepositoryContent(
@@ -135,6 +148,10 @@ async function fetchRepositoryContent(owner, repo, branch, path = "") {
           item.path
         );
         files.push(...subFiles);
+        sendSSEUpdate(repositoryId, {
+          status: "PROCESSING",
+          message: `Completed processing directory: ${item.path}`,
+        });
       }
     }
   } catch (error) {
