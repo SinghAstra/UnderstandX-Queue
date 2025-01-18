@@ -3,10 +3,11 @@ import {
   repoProcessingController,
   streamProcessingController,
 } from "../controllers/repository.controller.js";
+import { verifyToken } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/:id/process/stream", streamProcessingController);
-router.post("/process", repoProcessingController);
+router.get("/:id/stream", streamProcessingController);
+router.post("/process", verifyToken, repoProcessingController);
 
 export default router;

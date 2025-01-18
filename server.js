@@ -19,7 +19,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.get("/", (req, res) => {
   res.send("Welcome to SemanticX API");
 });
-app.use("/api/repository", verifyToken, repositoryRoutes);
+app.use("/api/repository", repositoryRoutes);
 
 // Start server
 app.listen(port, () => {

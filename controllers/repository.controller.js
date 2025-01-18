@@ -59,7 +59,7 @@ async function processRepositoryInBackground(repositoryId, githubUrl) {
       message: "Fetching files from GitHub",
     });
     // 3. Fetch GitHub repo files
-    const repoData = await fetchGitHubRepoData(githubUrl, false);
+    const repoData = await fetchGitHubRepoData(githubUrl, false, repositoryId);
 
     sendSSEUpdate(repositoryId, {
       status: "PROCESSING",
@@ -122,8 +122,8 @@ async function processRepositoryInBackground(repositoryId, githubUrl) {
     }
 
     sendSSEUpdate(repositoryId, {
-      status: "PROCESSING",
-      message: "Generated Embedding From the Chunks...",
+      status: "SUCCESS",
+      message: "Repository Processed Successfully.",
     });
 
     // 7. Update final status
