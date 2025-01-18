@@ -148,12 +148,20 @@ async function updateStatus(repositoryId, status) {
 
 export const streamProcessingController = (req, res) => {
   const repositoryId = req.params.id;
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",");
+
+  // Get the requesting origin
+  const origin = req.headers.origin;
+
+  // Check if the requesting origin is allowed
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
 
   // Set headers for SSE
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
 
   // Add this client to the clients map
   const repositoryClients = clients.get(repositoryId) || [];
