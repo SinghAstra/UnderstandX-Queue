@@ -16,8 +16,14 @@ const bullmq_1 = require("bullmq");
 const redis_1 = __importDefault(require("../config/redis"));
 const worker = new bullmq_1.Worker("exampleQueue", (job) => __awaiter(void 0, void 0, void 0, function* () {
     console.log(`Processing job ${job.id}:`, job.data);
-    // Simulate work (e.g., sending email, resizing image)
-    yield new Promise((res) => setTimeout(res, 3000));
+    let num = 1;
+    const interval = setInterval(() => {
+        console.log("num is", num);
+        console.log("date is", new Date());
+        num++;
+        if (num >= 10000)
+            clearInterval(interval); // Stop after 200 iterations
+    }, 100);
     console.log(`Job ${job.id} completed.`);
 }), { connection: redis_1.default });
 worker.on("completed", (job) => {

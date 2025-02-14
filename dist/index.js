@@ -26,5 +26,5 @@ app.get("/add-job", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     res.status(200).json({ message: "Task added to queue" });
 }));
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is listening on http://localhost:${PORT}`);
 });

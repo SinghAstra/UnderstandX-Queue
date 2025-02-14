@@ -6,13 +6,12 @@ const worker = new Worker(
   async (job) => {
     console.log(`Processing job ${job.id}:`, job.data);
     let num = 1;
-    while (num < 200) {
-      setTimeout(() => {
-        console.log("num is ", num);
-        console.log("date is ", new Date());
-        num++;
-      }, 100);
-    }
+    const interval = setInterval(() => {
+      console.log("num is", num);
+      console.log("date is", new Date());
+      num++;
+      if (num >= 10000) clearInterval(interval); // Stop after 200 iterations
+    }, 100);
     console.log(`Job ${job.id} completed.`);
   },
   { connection: redisConnection }
