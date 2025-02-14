@@ -5,8 +5,14 @@ const worker = new Worker(
   "exampleQueue",
   async (job) => {
     console.log(`Processing job ${job.id}:`, job.data);
-    // Simulate work (e.g., sending email, resizing image)
-    await new Promise((res) => setTimeout(res, 3000));
+    let num = 1;
+    while (num < 200) {
+      setTimeout(() => {
+        console.log("num is ", num);
+        console.log("date is ", new Date());
+        num++;
+      }, 100);
+    }
     console.log(`Job ${job.id} completed.`);
   },
   { connection: redisConnection }
