@@ -10,10 +10,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "worker": "nodemon dist/workers/example-worker.js",
-    "dev": "concurrently \"npm run start\" \"npm run worker\"",
     "build": "tsc",
-    "start": "nodemon dist/index.js"
+    "watch": "tsc --watch",
+    "worker": "nodemon --watch dist dist/workers/example-worker.js",
+    "start": "node dist/index.js",
+    "dev": "concurrently \"npm run watch\" \"nodemon --watch dist dist/index.js\" \"npm run worker\""
   },
   "keywords": [],
   "author": "",

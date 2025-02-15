@@ -7,11 +7,11 @@ const PORT = 5000;
 
 app.use(express.json());
 
-// app.get("/", (req: Request, res: Response) => {
-//   res.status(200).json({ message: "Welcome to navx-queue" });
-// });
-
 app.use("/api/queue", queueRoutes);
+
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).json({ message: "Welcome to navx-queue" });
+});
 
 app.get("/add-job", async (req: Request, res: Response) => {
   const date = new Date();
