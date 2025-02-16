@@ -17,9 +17,11 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "worker": "nodemon --watch dist dist/workers/repository.js",
-    "start": "node dist/index.js",
-    "dev": "concurrently \"npm run watch\" \"nodemon --watch dist dist/index.js\" \"npm run worker\""
+    "dev:worker1": "node dist/workers/repository.js --id=1",
+    "dev:worker2": "node dist/workers/directory.js --id=2",
+    "dev:worker3": "node dist/workers/file.js --id=3",
+    "dev:server": "node dist/index.js",
+    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\""
   },
   "keywords": [],
   "author": "",
