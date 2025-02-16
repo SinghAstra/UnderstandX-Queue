@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
-import { repositoryQueueController } from "../controllers/queue";
-import { verifyServiceToken } from "../middleware/verify-service-token";
+import { repositoryQueueController } from "../controllers/queue.js";
+import { verifyServiceToken } from "../middleware/verify-service-token.js";
 
 const router = Router();
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { repositoryQueue } from "../queues/repository";
+import { repositoryQueue } from "../queues/repository.js";
 
 export const repositoryQueueController = async (
   req: Request,

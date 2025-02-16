@@ -1,11 +1,11 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import connection from "../config/redis";
-import { QUEUES } from "../lib/constants";
-import { parseGithubUrl } from "../lib/github";
-import logger from "../lib/logger";
-import { prisma } from "../lib/prisma";
-import { sendProcessingUpdate } from "../lib/pusher/send-update";
+import connection from "../config/redis.js";
+import { QUEUES } from "../lib/constants.js";
+import { parseGithubUrl } from "../lib/github.js";
+import logger from "../lib/logger.js";
+import { prisma } from "../lib/prisma.js";
+import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,

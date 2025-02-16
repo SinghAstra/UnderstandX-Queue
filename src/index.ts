@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import queueRoutes from "./routes/queue";
+import queueRoutes from "./routes/queue.js";
 
 const app = express();
 const PORT = 5000;

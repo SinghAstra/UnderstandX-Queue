@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
-import { GitHubContent } from "../interfaces/github";
-import { sendProcessingUpdate } from "./pusher/send-update";
+import { GitHubContent } from "../interfaces/github.js";
+import { sendProcessingUpdate } from "./pusher/send-update.js";
 
 const auth = process.env.GITHUB_ACCESS_TOKEN;
 
