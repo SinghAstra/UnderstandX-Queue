@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { QUEUES } from "../lib/constants.js";
 import { repositoryQueue } from "../queues/repository.js";
 
 export const repositoryQueueController = async (
@@ -7,11 +8,11 @@ export const repositoryQueueController = async (
 ) => {
   try {
     const { repositoryId, userId, githubUrl } = req.body.auth;
-    console.log("req.body.auth --repositoryQueue is ", req.body.auth);
+    console.log("req.body.auth --repositoryQueueController is ", req.body.auth);
 
     // Add job to the repository queue
     await repositoryQueue.add(
-      "process-repository",
+      QUEUES.REPOSITORY,
       {
         repositoryId,
         userId,

@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
-import connection from "../config/redis.js";
 import { QUEUES } from "../lib/constants.js";
+import connection from "../lib/redis.js";
 
 export const repositoryQueue = new Queue(QUEUES.REPOSITORY, {
   connection,

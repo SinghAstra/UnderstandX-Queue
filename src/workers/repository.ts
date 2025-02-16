@@ -1,19 +1,20 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import connection from "../config/redis.js";
 import { QUEUES } from "../lib/constants.js";
 import { parseGithubUrl } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
+import connection from "../lib/redis.js";
+import { directoryQueue } from "../queues/repository.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
   async (job) => {
     const startTime = Date.now();
-    const { repositoryId, githubUrl, auth } = job.data;
+    const { repositoryId, githubUrl, userId } = job.data;
 
-    logger.info(`job.data --repositoryWorker is ${job.data}`);
+    logger.info(`job.data --repositoryWorker is ${JSON.stringify(job.data)}`);
 
     try {
       const { owner, repo, isValid } = parseGithubUrl(githubUrl);
@@ -35,14 +36,20 @@ export const repositoryWorker = new Worker(
         message: `Started processing repository: ${repo}`,
       });
 
+      console.log("About to be added in directoryQueue ", {
+        owner,
+        repo,
+        repositoryId,
+        path: "",
+      });
+
       // Queue the root directory for processing
-      // await directoryQueue.add("process-directory", {
-      //   owner,
-      //   repo,
-      //   repositoryId,
-      //   path: "",
-      //   auth,
-      // });
+      await directoryQueue.add(QUEUES.DIRECTORY, {
+        owner,
+        repo,
+        repositoryId,
+        path: "",
+      });
 
       const endTime = Date.now();
       logger.success(
@@ -88,7 +95,7 @@ repositoryWorker.on("failed", (job, error) => {
 });
 
 repositoryWorker.on("completed", (job) => {
-  logger.error(
+  logger.success(
     `Job ${job.id} in ${QUEUES.REPOSITORY} queue completed successfully`
   );
 });

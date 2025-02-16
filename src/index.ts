@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import logger from "./lib/logger.js";
 import queueRoutes from "./routes/queue.js";
 
 const app = express();
@@ -9,6 +10,10 @@ app.use(express.json());
 app.use("/api/queue", queueRoutes);
 
 app.get("/", (req: Request, res: Response) => {
+  const obj = {
+    name: "Abhay Pratap Singh",
+  };
+  logger.info(`obj is ${JSON.stringify(obj)}`);
   res.status(200).json({ message: "Welcome to navx-queue" });
 });
 
