@@ -1,18 +1,23 @@
 {
   "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "@prisma/client": "^6.3.1",
     "bullmq": "^5.40.4",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "ioredis": "^5.5.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "octokit": "^4.1.2",
+    "pusher": "^5.2.0"
   },
   "name": "navx-queue",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "worker": "nodemon --watch dist dist/workers/example-worker.js",
+    "worker": "nodemon --watch dist dist/workers/repository.js",
     "start": "node dist/index.js",
     "dev": "concurrently \"npm run watch\" \"nodemon --watch dist dist/index.js\" \"npm run worker\""
   },
@@ -23,9 +28,12 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.13.4",
     "concurrently": "^9.1.2",
     "nodemon": "^3.1.9",
+    "prisma": "^6.3.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
 }
