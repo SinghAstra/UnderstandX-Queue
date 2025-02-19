@@ -22,19 +22,17 @@ export const fileBatchWorker = new Worker(
 
     try {
       // Process files in batch
-      await Promise.all(
-        batch.map(async (file: GitHubContent) => {
-          await prisma.file.create({
-            data: {
-              path: file.path,
-              name: file.name,
-              content: file.content || "",
-              repositoryId,
-              directoryId,
-            },
-          });
-        })
-      );
+      batch.map(async (file: GitHubContent) => {
+        await prisma.file.create({
+          data: {
+            path: file.path,
+            name: file.name,
+            content: file.content || "",
+            repositoryId,
+            directoryId,
+          },
+        });
+      });
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
@@ -76,7 +74,7 @@ export const fileBatchWorker = new Worker(
   },
   {
     connection,
-    concurrency: 20, // Process multiple batches in parallel
+    concurrency: 5,
   }
 );
 

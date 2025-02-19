@@ -39,22 +39,20 @@ export const directoryWorker = new Worker(
 
       // Save directories in parallel
       const directoryMap = new Map();
-      await Promise.all(
-        directories.map(async (dir) => {
-          const parentPath = dir.path.split("/").slice(0, -1).join("/");
-          const parentDir = directoryMap.get(parentPath);
+      directories.map(async (dir) => {
+        const parentPath = dir.path.split("/").slice(0, -1).join("/");
+        const parentDir = directoryMap.get(parentPath);
 
-          const directory = await prisma.directory.create({
-            data: {
-              path: dir.path,
-              repositoryId,
-              parentId: parentDir?.id || null,
-            },
-          });
+        const directory = await prisma.directory.create({
+          data: {
+            path: dir.path,
+            repositoryId,
+            parentId: parentDir?.id || null,
+          },
+        });
 
-          directoryMap.set(dir.path, directory);
-        })
-      );
+        directoryMap.set(dir.path, directory);
+      });
 
       // Get directoryId for current path
       const pathParts = files[0]?.path.split("/") || [];
@@ -125,7 +123,7 @@ export const directoryWorker = new Worker(
   },
   {
     connection,
-    concurrency: 10, // Process multiple directories in parallel
+    concurrency: 5,
   }
 );
 
@@ -140,19 +138,17 @@ async function processFilesDirectly(
     message: "In process files Directly",
   });
 
-  await Promise.all(
-    files.map(async (file) => {
-      await prisma.file.create({
-        data: {
-          path: file.path,
-          name: file.name,
-          content: file.content || "",
-          repositoryId,
-          directoryId: directoryId,
-        },
-      });
-    })
-  );
+  files.map(async (file) => {
+    await prisma.file.create({
+      data: {
+        path: file.path,
+        name: file.name,
+        content: file.content || "",
+        repositoryId,
+        directoryId: directoryId,
+      },
+    });
+  });
 
   // Notify user about saved files
   await sendProcessingUpdate(repositoryId, {
