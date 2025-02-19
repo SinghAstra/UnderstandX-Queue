@@ -2,6 +2,7 @@ import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
 import { GitHubContent } from "../interfaces/github.js";
 import {
+  CONCURRENT_PROCESSING,
   FILE_BATCH_SIZE,
   QUEUES,
   SMALL_FILES_THRESHOLD,
@@ -18,7 +19,6 @@ export const directoryWorker = new Worker(
   async (job) => {
     const startTime = Date.now();
     const { owner, repo, repositoryId, path } = job.data;
-    logger.info(`job.data -- directoryWorker is ${JSON.stringify(job.data)}`);
 
     try {
       // Fetch only the current directory level (do NOT recurse)
@@ -119,13 +119,11 @@ export const directoryWorker = new Worker(
         status: RepositoryStatus.FAILED,
         message: `Failed to process directory: ${path || "root"}`,
       });
-
-      throw error;
     }
   },
   {
     connection,
-    concurrency: 2,
+    concurrency: CONCURRENT_PROCESSING,
   }
 );
 
@@ -135,32 +133,49 @@ async function processFilesDirectly(
   currentPath: string,
   directoryId: string
 ) {
-  await sendProcessingUpdate(repositoryId, {
-    status: RepositoryStatus.PROCESSING,
-    message: "In process files Directly",
-  });
+  try {
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.PROCESSING,
+      message: "In process files Directly",
+    });
 
-  // Prepare data for bulk insertion
-  const fileInserts = files.map((file) => ({
-    data: {
-      path: file.path,
-      name: file.name,
-      content: file.content || "",
-      repositoryId,
-      directoryId,
-    },
-  }));
+    await prisma.$transaction(
+      files.map((file) =>
+        prisma.file.create({
+          data: {
+            path: file.path,
+            name: file.name,
+            content: file.content || "",
+            repositoryId,
+            directoryId,
+          },
+        })
+      )
+    );
 
-  // Insert all files in a single transaction
-  await prisma.$transaction(
-    fileInserts.map((file) => prisma.file.create(file))
-  );
+    // Notify user about saved files
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.PROCESSING,
+      message: `Saved ${files.length} files in ${currentPath || "root"}`,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error(`processFileDirectly error: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
+    } else {
+      logger.error(`Unknown processFileDirectly error: ${error}`);
+    }
 
-  // Notify user about saved files
-  await sendProcessingUpdate(repositoryId, {
-    status: RepositoryStatus.PROCESSING,
-    message: `Saved ${files.length} files in ${currentPath || "root"}`,
-  });
+    // Notify user about failure
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.FAILED,
+      message: `Failed to process files --processFileDirectly: ${
+        currentPath || "root"
+      }`,
+    });
+
+    throw error;
+  }
 }
 
 async function handleLargeFileSet(
@@ -169,30 +184,78 @@ async function handleLargeFileSet(
   currentPath: string,
   directoryId: string | null
 ) {
-  await sendProcessingUpdate(repositoryId, {
-    status: RepositoryStatus.PROCESSING,
-    message: `Processing ${files.length} files in batches for ${
-      currentPath || "root"
-    }`,
-  });
+  try {
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.PROCESSING,
+      message: `Processing ${files.length} files in batches for ${
+        currentPath || "root"
+      }`,
+    });
 
-  const batches = [];
-  for (let i = 0; i < files.length; i += FILE_BATCH_SIZE) {
-    batches.push(files.slice(i, i + FILE_BATCH_SIZE));
-  }
+    const fileBatches = [];
+    for (let i = 0; i < files.length; i += FILE_BATCH_SIZE) {
+      fileBatches.push(files.slice(i, i + FILE_BATCH_SIZE));
+    }
 
-  await Promise.all(
-    batches.map(async (batch, index) => {
-      await fileBatchQueue.add(QUEUES.FILE_BATCH, {
-        batch,
-        repositoryId,
-        directoryId,
-        currentPath,
-        batchNumber: index + 1,
-        totalBatches: batches.length,
+    logger.info(`Total file batches: ${fileBatches.length}`);
+
+    for (let i = 0; i < fileBatches.length; i++) {
+      const batch = fileBatches[i];
+
+      await prisma.$transaction(
+        batch.map((file) =>
+          prisma.file.create({
+            data: {
+              path: file.path,
+              name: file.name,
+              content: file.content || "",
+              repositoryId,
+              directoryId,
+            },
+          })
+        )
+      );
+
+      logger.info(
+        `Saved batch ${i + 1}/${fileBatches.length} (${batch.length} files)`
+      );
+      await sendProcessingUpdate(repositoryId, {
+        status: RepositoryStatus.PROCESSING,
+        message: `Saved batch ${i + 1}/${fileBatches.length} (${
+          batch.length
+        } files) for ${currentPath || "root"}`,
       });
-    })
-  );
+    }
+
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.SUCCESS,
+      message: `Finished processing ${files.length} files in ${
+        currentPath || "root"
+      }`,
+    });
+
+    logger.success(
+      `Successfully saved all ${files.length} files in batches for ${
+        currentPath || "root"
+      }`
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error(`handleLargeFileSet error: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
+    } else {
+      logger.error(`Unknown handleLargeFileSet error: ${error}`);
+    }
+
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.FAILED,
+      message: `Failed to save files in ${
+        currentPath || "root"
+      } --handleLargeFileSet`,
+    });
+
+    throw error;
+  }
 }
 
 directoryWorker.on("failed", (job, error) => {

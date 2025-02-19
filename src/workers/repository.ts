@@ -14,8 +14,6 @@ export const repositoryWorker = new Worker(
     const startTime = Date.now();
     const { repositoryId, githubUrl, userId } = job.data;
 
-    logger.info(`job.data --repositoryWorker is ${JSON.stringify(job.data)}`);
-
     try {
       const { owner, repo, isValid } = parseGithubUrl(githubUrl);
 

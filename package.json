@@ -20,9 +20,8 @@
     "watch": "tsc --watch",
     "dev:worker1": "node dist/workers/repository.js --id=1",
     "dev:worker2": "node dist/workers/directory.js --id=2",
-    "dev:worker3": "node dist/workers/file.js --id=3",
     "dev:server": "node dist/index.js",
-    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\""
+    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\""
   },
   "keywords": [],
   "author": "",

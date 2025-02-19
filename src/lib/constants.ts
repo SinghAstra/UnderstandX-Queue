@@ -6,3 +6,4 @@ export const QUEUES = {
 
 export const FILE_BATCH_SIZE = 10;
 export const SMALL_FILES_THRESHOLD = 10;
+export const CONCURRENT_PROCESSING = 5;

@@ -105,7 +105,6 @@ export async function fetchGithubContent(
         });
 
         console.log("Fetched File: ", item.name);
-        console.log("File Path: ", item.path);
       } else if (item.type === "dir") {
         items.push({
           path: item.path,
