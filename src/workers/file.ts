@@ -22,17 +22,19 @@ export const fileBatchWorker = new Worker(
 
     try {
       // Process files in batch
-      batch.map(async (file: GitHubContent) => {
-        await prisma.file.create({
-          data: {
-            path: file.path,
-            name: file.name,
-            content: file.content || "",
-            repositoryId,
-            directoryId,
-          },
-        });
-      });
+      await prisma.$transaction(
+        batch.map((file: GitHubContent) => {
+          prisma.file.create({
+            data: {
+              path: file.path,
+              name: file.name,
+              content: file.content || "",
+              repositoryId,
+              directoryId,
+            },
+          });
+        })
+      );
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
@@ -74,7 +76,7 @@ export const fileBatchWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5,
+    concurrency: 2,
   }
 );
 
@@ -89,3 +91,13 @@ fileBatchWorker.on("completed", (job) => {
     `Job ${job.id} in ${QUEUES.FILE_BATCH} queue completed successfully`
   );
 });
+
+// Gracefully shutdown Prisma when worker exits
+const shutdown = async () => {
+  console.log("Shutting down worker gracefully...");
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

@@ -33,25 +33,27 @@ export const directoryWorker = new Worker(
       const directories = items.filter((item) => item.type === "dir");
       const files = items.filter((item) => item.type === "file");
 
-      // log directory and files
-      logger.info(`directories: ${JSON.stringify(directories)}`);
-      logger.info(`files: ${JSON.stringify(files)}`);
-
       // Save directories in parallel
       const directoryMap = new Map();
-      directories.map(async (dir) => {
+      const directoryData = directories.map((dir) => {
         const parentPath = dir.path.split("/").slice(0, -1).join("/");
         const parentDir = directoryMap.get(parentPath);
 
-        const directory = await prisma.directory.create({
+        return prisma.directory.create({
           data: {
             path: dir.path,
             repositoryId,
             parentId: parentDir?.id || null,
           },
         });
+      });
 
-        directoryMap.set(dir.path, directory);
+      // Run everything inside a transaction to limit connections
+      const createdDirectories = await prisma.$transaction(directoryData);
+
+      // Update directoryMap after all inserts are done
+      createdDirectories.forEach((directory) => {
+        directoryMap.set(directory.path, directory);
       });
 
       // Get directoryId for current path
@@ -123,7 +125,7 @@ export const directoryWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5,
+    concurrency: 2,
   }
 );
 
@@ -138,17 +140,21 @@ async function processFilesDirectly(
     message: "In process files Directly",
   });
 
-  files.map(async (file) => {
-    await prisma.file.create({
-      data: {
-        path: file.path,
-        name: file.name,
-        content: file.content || "",
-        repositoryId,
-        directoryId: directoryId,
-      },
-    });
-  });
+  // Prepare data for bulk insertion
+  const fileInserts = files.map((file) => ({
+    data: {
+      path: file.path,
+      name: file.name,
+      content: file.content || "",
+      repositoryId,
+      directoryId,
+    },
+  }));
+
+  // Insert all files in a single transaction
+  await prisma.$transaction(
+    fileInserts.map((file) => prisma.file.create(file))
+  );
 
   // Notify user about saved files
   await sendProcessingUpdate(repositoryId, {
@@ -200,3 +206,13 @@ directoryWorker.on("completed", (job) => {
     `Job ${job.id} in ${QUEUES.DIRECTORY} queue completed successfully`
   );
 });
+
+// Gracefully shutdown Prisma when worker exits
+const shutdown = async () => {
+  console.log("Shutting down worker gracefully...");
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

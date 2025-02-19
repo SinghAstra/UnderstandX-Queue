@@ -99,3 +99,13 @@ repositoryWorker.on("completed", (job) => {
     `Job ${job.id} in ${QUEUES.REPOSITORY} queue completed successfully`
   );
 });
+
+// Gracefully shutdown Prisma when worker exits
+const shutdown = async () => {
+  console.log("Shutting down worker gracefully...");
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
