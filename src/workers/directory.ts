@@ -11,8 +11,11 @@ import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
-import connection from "../lib/redis.js";
-import { directoryQueue, fileBatchQueue } from "../queues/repository.js";
+import {
+  default as connection,
+  default as redisConnection,
+} from "../lib/redis.js";
+import { directoryQueue } from "../queues/repository.js";
 
 export const directoryWorker = new Worker(
   QUEUES.DIRECTORY,
@@ -62,22 +65,12 @@ export const directoryWorker = new Worker(
       const dirPath = pathParts.join("/");
       const directoryId = directoryMap.get(dirPath)?.id || null;
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.PROCESSING,
-        message: `DirectoryId is ${directoryId}`,
-      });
-
-      if (files.length <= SMALL_FILES_THRESHOLD) {
-        // Process files directly if count is small
-        await processFilesDirectly(files, repositoryId, path, directoryId);
-      } else {
-        // Split into batches and queue for processing
-        await handleLargeFileSet(files, repositoryId, path, directoryId);
-      }
+      await processFilesInBatches(files, repositoryId, path, directoryId);
 
       // Queue subdirectories for processing
       await Promise.all(
         directories.map(async (dir) => {
+          await redisConnection.incr(`repo:${repositoryId}:pending_jobs`);
           await directoryQueue.add("process-directory", {
             owner,
             repo,
@@ -127,58 +120,7 @@ export const directoryWorker = new Worker(
   }
 );
 
-async function processFilesDirectly(
-  files: GitHubContent[],
-  repositoryId: string,
-  currentPath: string,
-  directoryId: string
-) {
-  try {
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.PROCESSING,
-      message: "In process files Directly",
-    });
-
-    await prisma.$transaction(
-      files.map((file) =>
-        prisma.file.create({
-          data: {
-            path: file.path,
-            name: file.name,
-            content: file.content || "",
-            repositoryId,
-            directoryId,
-          },
-        })
-      )
-    );
-
-    // Notify user about saved files
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.PROCESSING,
-      message: `Saved ${files.length} files in ${currentPath || "root"}`,
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error(`processFileDirectly error: ${error.message}`);
-      logger.error(`Stack: ${error.stack}`);
-    } else {
-      logger.error(`Unknown processFileDirectly error: ${error}`);
-    }
-
-    // Notify user about failure
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.FAILED,
-      message: `Failed to process files --processFileDirectly: ${
-        currentPath || "root"
-      }`,
-    });
-
-    throw error;
-  }
-}
-
-async function handleLargeFileSet(
+async function processFilesInBatches(
   files: GitHubContent[],
   repositoryId: string,
   currentPath: string,
@@ -264,10 +206,41 @@ directoryWorker.on("failed", (job, error) => {
   );
 });
 
-directoryWorker.on("completed", (job) => {
-  logger.success(
-    `Job ${job.id} in ${QUEUES.DIRECTORY} queue completed successfully`
+directoryWorker.on("completed", async (job) => {
+  const { repositoryId } = job.data;
+
+  // Decrement the job counter
+  const remainingJobs = await redisConnection.decr(
+    `repo:${repositoryId}:pending_jobs`
   );
+
+  // Fetch the current repository status
+  const repository = await prisma.repository.findUnique({
+    where: { id: repositoryId },
+    select: { status: true },
+  });
+
+  if (
+    remainingJobs === 0 &&
+    repository?.status === RepositoryStatus.PROCESSING
+  ) {
+    // Mark repository as successfully processed
+    await prisma.repository.update({
+      where: { id: repositoryId },
+      data: { status: RepositoryStatus.SUCCESS },
+    });
+
+    await sendProcessingUpdate(repositoryId, {
+      status: RepositoryStatus.SUCCESS,
+      message: `All directories and files have been processed.`,
+    });
+
+    logger.success(`Repository ${repositoryId} processing completed.`);
+  } else {
+    logger.info(
+      `Job ${job.id} completed. Remaining jobs: ${remainingJobs}, Repo Status: ${repository?.status}`
+    );
+  }
 });
 
 // Gracefully shutdown Prisma when worker exits
