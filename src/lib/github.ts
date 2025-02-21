@@ -103,8 +103,6 @@ export async function fetchGithubContent(
           status: "PROCESSING",
           message: `Fetching ${item.path}`,
         });
-
-        console.log("Fetched File: ", item.name);
       } else if (item.type === "dir") {
         items.push({
           path: item.path,

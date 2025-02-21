@@ -16,7 +16,6 @@ import { directoryQueue } from "../queues/repository.js";
 export const directoryWorker = new Worker(
   QUEUES.DIRECTORY,
   async (job) => {
-    const startTime = Date.now();
     const { owner, repo, repositoryId, path } = job.data;
 
     try {
@@ -32,36 +31,46 @@ export const directoryWorker = new Worker(
       const directories = items.filter((item) => item.type === "dir");
       const files = items.filter((item) => item.type === "file");
 
-      // Save directories in parallel
-      const directoryMap = new Map();
-      const directoryData = directories.map((dir) => {
-        const parentPath = dir.path.split("/").slice(0, -1).join("/");
-        const parentDir = directoryMap.get(parentPath);
+      // const parentPath = dir.path.split("/").slice(0, -1).join("/");
+      const directory = await prisma.directory.findFirst({
+        where: {
+          repositoryId,
+          path,
+        },
+      });
+      const parentDirId = directory?.id || null;
+      console.log(
+        "parentDirId is ",
+        parentDirId,
+        "path is ",
+        path === "" ? "ROOT" : path,
+        "parentDirId: ",
+        parentDirId
+      );
 
+      // Save directories in parallel
+      const directoryData = directories.map((dir) => {
         return prisma.directory.create({
           data: {
             path: dir.path,
             repositoryId,
-            parentId: parentDir?.id || null,
+            parentId: parentDirId,
           },
         });
       });
 
       // Run everything inside a transaction to limit connections
       const createdDirectories = await prisma.$transaction(directoryData);
+      console.log(
+        "createdDirectories: ",
+        createdDirectories,
+        "path is ",
+        path === "" ? "ROOT" : path,
+        "parentDirId: ",
+        parentDirId
+      );
 
-      // Update directoryMap after all inserts are done
-      createdDirectories.forEach((directory) => {
-        directoryMap.set(directory.path, directory);
-      });
-
-      // Get directoryId for current path
-      const pathParts = files[0]?.path.split("/") || [];
-      pathParts.pop();
-      const dirPath = pathParts.join("/");
-      const directoryId = directoryMap.get(dirPath)?.id || null;
-
-      await processFilesInBatches(files, repositoryId, path, directoryId);
+      await processFilesInBatches(files, repositoryId, path, parentDirId);
 
       // Queue subdirectories for processing
       await Promise.all(
@@ -81,13 +90,6 @@ export const directoryWorker = new Worker(
         status: RepositoryStatus.PROCESSING,
         message: `Finished processing directory: ${path || "root"}`,
       });
-
-      const endTime = Date.now();
-      logger.success(
-        `Worker processing time for directory ${path || "root"}: ${
-          endTime - startTime
-        } milliseconds`
-      );
 
       return { status: "SUCCESS", processed: items.length };
     } catch (error) {
@@ -122,6 +124,7 @@ async function processFilesInBatches(
   currentPath: string,
   directoryId: string | null
 ) {
+  console.log("directoryId --processFilesInBatches is ", directoryId);
   try {
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
@@ -135,12 +138,12 @@ async function processFilesInBatches(
       fileBatches.push(files.slice(i, i + FILE_BATCH_SIZE));
     }
 
-    logger.info(`Total file batches: ${fileBatches.length}`);
+    // logger.info(`Total file batches: ${fileBatches.length}`);
 
     for (let i = 0; i < fileBatches.length; i++) {
       const batch = fileBatches[i];
 
-      await prisma.$transaction(
+      const createdFiles = await prisma.$transaction(
         batch.map((file) =>
           prisma.file.create({
             data: {
@@ -154,9 +157,28 @@ async function processFilesInBatches(
         )
       );
 
-      logger.info(
-        `Saved batch ${i + 1}/${fileBatches.length} (${batch.length} files)`
+      const parsedCreatedFiles = createdFiles.map((createdFile) => {
+        return {
+          id: createdFile.id,
+          path: createdFile.path,
+          name: createdFile.name,
+          directoryId: createdFile.directoryId,
+          repositoryId: createdFile.repositoryId,
+        };
+      });
+
+      console.log(
+        "parsedCreatedFiles is ",
+        parsedCreatedFiles,
+        "path is ",
+        currentPath === "" ? "ROOT" : currentPath,
+        "parentDirId: ",
+        directoryId
       );
+
+      // logger.info(
+      //   `Saved batch ${i + 1}/${fileBatches.length} (${batch.length} files)`
+      // );
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
         message: `Saved batch ${i + 1}/${fileBatches.length} (${
@@ -172,11 +194,11 @@ async function processFilesInBatches(
       }`,
     });
 
-    logger.success(
-      `Successfully saved all ${files.length} files in batches for ${
-        currentPath || "root"
-      }`
-    );
+    // logger.success(
+    //   `Successfully saved all ${files.length} files in batches for ${
+    //     currentPath || "root"
+    //   }`
+    // );
   } catch (error) {
     if (error instanceof Error) {
       logger.error(`handleLargeFileSet error: ${error.message}`);
