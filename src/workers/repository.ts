@@ -5,7 +5,7 @@ import { parseGithubUrl } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
-import connection from "../lib/redis.js";
+import { default as redisConnection } from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
 
 export const repositoryWorker = new Worker(
@@ -41,6 +41,7 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
+      await redisConnection.incr(`repo:${repositoryId}:pending_jobs`);
       // Queue the root directory for processing
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,
@@ -81,7 +82,7 @@ export const repositoryWorker = new Worker(
     }
   },
   {
-    connection,
+    connection: redisConnection,
     concurrency: 5,
   }
 );

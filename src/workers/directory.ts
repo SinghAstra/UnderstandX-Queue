@@ -5,16 +5,12 @@ import {
   CONCURRENT_PROCESSING,
   FILE_BATCH_SIZE,
   QUEUES,
-  SMALL_FILES_THRESHOLD,
 } from "../lib/constants.js";
 import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
-import {
-  default as connection,
-  default as redisConnection,
-} from "../lib/redis.js";
+import { default as redisConnection } from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
 
 export const directoryWorker = new Worker(
@@ -115,7 +111,7 @@ export const directoryWorker = new Worker(
     }
   },
   {
-    connection,
+    connection: redisConnection,
     concurrency: CONCURRENT_PROCESSING,
   }
 );
