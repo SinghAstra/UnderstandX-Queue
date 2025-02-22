@@ -41,7 +41,6 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      await redisConnection.incr(`repo:${repositoryId}:pending_jobs`);
       // Queue the root directory for processing
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,

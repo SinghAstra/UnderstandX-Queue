@@ -18,7 +18,6 @@ model User {
   updatedAt     DateTime     @updatedAt
   accounts      Account[]
   repositories  Repository[]
-  searches      Search[]
   sessions      Session[]
 }
 
@@ -70,7 +69,6 @@ model Repository {
   longSummary  String?
   shortSummary String?
   directories  Directory[]
-  features     Feature[]
   files        File[]
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -104,45 +102,19 @@ model File {
   repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }
 
-model Feature {
-  id           String          @id @default(cuid())
-  name         String
-  description  String
-  category     FeatureCategory
-  repositoryId String
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  repository   Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-
-  @@index([category])
-}
-
-model Search {
-  id        String   @id @default(cuid())
-  query     String
-  userId    String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
 enum RepositoryStatus {
   PENDING
   PROCESSING
   SUCCESS
   FAILED
-  CANCELLED
 }
 
-enum FeatureCategory {
-  AUTHENTICATION
-  DATABASE
-  UI_COMPONENTS
-  STATE_MANAGEMENT
-  API_INTEGRATION
-  TESTING
-  DEVOPS
-  SECURITY
-  PERFORMANCE
-  DOCUMENTATION
-  OTHER
+enum DirectoryStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
 }
+
+
