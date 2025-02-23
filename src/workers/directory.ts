@@ -1,5 +1,7 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
+import { execPath } from "node:process";
+import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
   CONCURRENT_PROCESSING,
@@ -27,6 +29,11 @@ async function updateRepositoryStatus(repositoryId: string) {
   const activeCount = parseInt(activeJobs || "0");
   const pendingCount = parseInt(pendingJobs || "0");
 
+  console.log("--------------------------------------------------");
+  console.log("activeCount is ", activeCount);
+  console.log("pendingCount is ", pendingCount);
+  console.log("--------------------------------------------------");
+
   // If no jobs are running or pending, mark as success
   if (activeCount === 0 && pendingCount === 0) {
     await prisma.repository.update({
@@ -35,6 +42,8 @@ async function updateRepositoryStatus(repositoryId: string) {
     });
 
     await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
       status: RepositoryStatus.SUCCESS,
       message: "Repository processing completed",
     });
@@ -60,6 +69,8 @@ export const directoryWorker = new Worker(
 
       // Notify frontend that this directory is being processed
       await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Processing directory: ${path || "root"}`,
       });
@@ -117,6 +128,8 @@ export const directoryWorker = new Worker(
 
       // Notify user that this directory is fully processed
       await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Finished processing directory: ${path || "root"}`,
       });
@@ -143,6 +156,8 @@ export const directoryWorker = new Worker(
 
       // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
         status: RepositoryStatus.FAILED,
         message: `Failed to process directory: ${path || "root"}`,
       });
@@ -163,6 +178,8 @@ async function processFilesInBatches(
   console.log("directoryId --processFilesInBatches is ", directoryId);
   try {
     await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
       message: `Processing ${files.length} files in batches for ${
         currentPath || "root"
@@ -216,6 +233,8 @@ async function processFilesInBatches(
       //   `Saved batch ${i + 1}/${fileBatches.length} (${batch.length} files)`
       // );
       await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Saved batch ${i + 1}/${fileBatches.length} (${
           batch.length
@@ -224,6 +243,8 @@ async function processFilesInBatches(
     }
 
     await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
       status: RepositoryStatus.SUCCESS,
       message: `Finished processing ${files.length} files in ${
         currentPath || "root"
@@ -244,6 +265,8 @@ async function processFilesInBatches(
     }
 
     await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
       status: RepositoryStatus.FAILED,
       message: `Failed to save files in ${
         currentPath || "root"
@@ -255,14 +278,13 @@ async function processFilesInBatches(
 }
 
 directoryWorker.on("failed", (job, error) => {
-  logger.error(
-    `Job ${job?.id} in ${QUEUES.DIRECTORY} queue failed with error: ${error.message}`
-  );
+  const { path } = job?.data;
+  logger.error(`Directory at  ${path} processing failed.`);
 });
 
 directoryWorker.on("completed", async (job) => {
-  const { repositoryId } = job.data;
-  logger.success(`Repository ${repositoryId} processing completed.`);
+  const { path } = job.data;
+  logger.success(`Directory at  ${path} processing completed.`);
 });
 
 // Gracefully shutdown Prisma when worker exits
