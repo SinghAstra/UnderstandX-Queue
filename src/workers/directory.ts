@@ -29,16 +29,18 @@ async function updateRepositoryStatus(repositoryId: string) {
   const activeCount = parseInt(activeJobs || "0");
   const pendingCount = parseInt(pendingJobs || "0");
 
-  console.log("--------------------------------------------------");
-  console.log("activeCount is ", activeCount);
-  console.log("pendingCount is ", pendingCount);
-  console.log("--------------------------------------------------");
-
   // If no jobs are running or pending, mark as success
   if (activeCount === 0 && pendingCount === 0) {
     await prisma.repository.update({
       where: { id: repositoryId },
       data: { status: RepositoryStatus.SUCCESS },
+    });
+
+    await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
+      status: RepositoryStatus.SUCCESS,
+      message: "Please Wait For Few more seconds ...",
     });
 
     await sendProcessingUpdate(repositoryId, {
