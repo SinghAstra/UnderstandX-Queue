@@ -2,7 +2,7 @@ import { RateLimiter } from "limiter";
 
 // Configure based on your API's limits
 // For Gemini, start conservative and adjust as needed
-const REQUESTS_PER_MINUTE = 15;
+const REQUESTS_PER_MINUTE = 3;
 
 // Create a singleton limiter instance
 export const aiRequestLimiter = new RateLimiter({

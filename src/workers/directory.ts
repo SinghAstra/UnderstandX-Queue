@@ -44,6 +44,11 @@ async function updateRepositoryStatus(repositoryId: string) {
 
   // If no jobs are running or pending, mark as success
   if (activeCount === 0 && pendingCount === 0) {
+    logger.info("-------------------------------------------------------");
+    logger.info("Inside the if of activeCount===0 && pendingCount===0");
+    logger.info(`dirPath is ${dirPath}`);
+    logger.info("-------------------------------------------------------");
+
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
       id: uuidv4(),
@@ -143,11 +148,6 @@ export const directoryWorker = new Worker(
 
       const directories = items.filter((item) => item.type === "dir");
       const files = items.filter((item) => item.type === "file");
-
-      // Increment pending jobs counter for discovered directories
-      if (directories.length > 0) {
-        await redisConnection.incrby(pendingJobsKey, directories.length);
-      }
 
       const directory = await prisma.directory.findFirst({
         where: {

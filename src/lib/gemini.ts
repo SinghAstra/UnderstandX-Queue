@@ -58,6 +58,8 @@ export async function generateBatchSummaries(
 
     const summaries: Summary[] = JSON.parse(result.response.text());
 
+    console.log("summaries is ", summaries);
+
     // First Perform the Check that are the summaries created properly
     // Summaries should be an array of object with two properties path and summary
     // Check if the path is present in the files array and if the summary is not empty
