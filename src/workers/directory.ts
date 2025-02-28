@@ -5,10 +5,14 @@ import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
   CONCURRENT_PROCESSING,
-  FILE_BATCH_SIZE,
+  FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY,
+  FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
 } from "../lib/constants.js";
-import { getRepositoryOverview } from "../lib/gemini.js";
+import {
+  generateBatchSummaries,
+  getRepositoryOverview,
+} from "../lib/gemini.js";
 import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
@@ -20,6 +24,8 @@ import { directoryQueue } from "../queues/repository.js";
 const ACTIVE_JOBS_KEY = "repository:active_jobs:";
 export const PENDING_JOBS_KEY = "repository:pending_jobs:";
 
+let dirPath: string;
+
 async function updateRepositoryStatus(repositoryId: string) {
   const activeJobsKey = ACTIVE_JOBS_KEY + repositoryId;
   const pendingJobsKey = PENDING_JOBS_KEY + repositoryId;
@@ -30,8 +36,61 @@ async function updateRepositoryStatus(repositoryId: string) {
   const activeCount = parseInt(activeJobs || "0");
   const pendingCount = parseInt(pendingJobs || "0");
 
+  console.log("-------------------------------------------------------");
+  console.log("dirPath is ", dirPath);
+  console.log("activeCount is ", activeCount);
+  console.log("pendingCount is ", pendingCount);
+  console.log("-------------------------------------------------------");
+
   // If no jobs are running or pending, mark as success
   if (activeCount === 0 && pendingCount === 0) {
+    // Notify user that summary generation is starting
+    await sendProcessingUpdate(repositoryId, {
+      id: uuidv4(),
+      timestamp: new Date(),
+      status: RepositoryStatus.PROCESSING,
+      message: "Starting to generate file summaries...",
+    });
+
+    // Fetch the Files of the repository that do not have short summary
+    const filesWithoutSummary = await prisma.file.findMany({
+      where: { repositoryId, shortSummary: null },
+      select: { id: true, path: true, content: true },
+    });
+
+    const batchSize = FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY;
+    for (let i = 0; i < filesWithoutSummary.length; i += batchSize) {
+      const fileWithoutSummaryBatch = filesWithoutSummary
+        .slice(i, i + batchSize)
+        .filter((file) => file.content as string);
+
+      const batchFileWithContent = fileWithoutSummaryBatch
+        .filter((file) => file.content !== null)
+        .map((file) => ({
+          ...file,
+          content: file.content as string,
+        }));
+
+      const summaries = await generateBatchSummaries(batchFileWithContent);
+      await prisma.$transaction(
+        summaries.map((summary: { id: string; summary: string }) =>
+          prisma.file.update({
+            where: { id: summary.id },
+            data: { shortSummary: summary.summary },
+          })
+        )
+      );
+
+      await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
+        status: RepositoryStatus.PROCESSING,
+        message: `Generated summaries for batch ${Math.ceil(
+          (i + batchSize) / batchSize
+        )} of ${Math.ceil(filesWithoutSummary.length / batchSize)}`,
+      });
+    }
+
     const repoOverview = await getRepositoryOverview(repositoryId);
 
     await prisma.repository.update({
@@ -62,6 +121,7 @@ export const directoryWorker = new Worker(
   QUEUES.DIRECTORY,
   async (job) => {
     const { owner, repo, repositoryId, path } = job.data;
+    dirPath = path;
     const activeJobsKey = ACTIVE_JOBS_KEY + repositoryId;
     const pendingJobsKey = PENDING_JOBS_KEY + repositoryId;
 
@@ -192,8 +252,14 @@ async function processFilesInBatches(
     });
 
     const fileBatches = [];
-    for (let i = 0; i < files.length; i += FILE_BATCH_SIZE) {
-      fileBatches.push(files.slice(i, i + FILE_BATCH_SIZE));
+    for (
+      let i = 0;
+      i < files.length;
+      i += FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION
+    ) {
+      fileBatches.push(
+        files.slice(i, i + FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION)
+      );
     }
 
     for (let i = 0; i < fileBatches.length; i++) {
@@ -208,7 +274,6 @@ async function processFilesInBatches(
               content: file.content || "",
               repositoryId,
               directoryId,
-              shortSummary: file.shortSummary,
             },
           })
         )

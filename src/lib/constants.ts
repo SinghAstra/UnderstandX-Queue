@@ -3,6 +3,6 @@ export const QUEUES = {
   DIRECTORY: "directory-processing",
 };
 
-export const FILE_BATCH_SIZE = 50;
-export const SMALL_FILES_THRESHOLD = 10;
+export const FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION = 50;
 export const CONCURRENT_PROCESSING = 100;
+export const FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY = 10;

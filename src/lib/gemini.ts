@@ -12,32 +12,94 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Function to get summary from Gemini AI
-export const getFileShortSummary = async (
-  filePath: string,
-  fileContent: string
-) => {
+type Summary = {
+  path: string;
+  summary: string;
+};
+
+type ParsedSummary = {
+  id: string;
+  path: string;
+  summary: string;
+};
+
+export async function generateBatchSummaries(
+  files: { id: string; path: string; content: string }[]
+) {
   try {
     await acquireRateLimit();
+    const filePaths = new Set(files.map((file) => file.path));
 
     const prompt = `
-      You are a code assistant. Summarize this file in 1-2 sentences, focusing on its purpose and main functionality.
-      Path: ${filePath}
-      Code: 
-      ${fileContent}
+      You are a code assistant. Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties. Example response:
+      [
+        {"path": "src/file1.js", "summary": "This file contains utility functions for string manipulation."},
+        {"path": "src/file2.py", "summary": "This script processes CSV data and generates a report."}
+      ]
+
+      Files:
+      ${files
+        .map(
+          (file, index) => `
+            ${index + 1}. path: ${file.path}
+            content:
+            ${file.content}
+          `
+        )
+        .join("\n")}
     `;
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    });
 
-    return result.response.text();
+    const summaries: Summary[] = JSON.parse(result.response.text());
+
+    // First Perform the Check that are the summaries created properly
+    // Summaries should be an array of object with two properties path and summary
+    // Check if the path is present in the files array and if the summary is not empty
+    // If any of the checks fails, throw an error with the problematic file path
+    const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
+      if (
+        typeof summary !== "object" ||
+        typeof summary.path !== "string" ||
+        typeof summary.summary !== "string" ||
+        !filePaths.has(summary.path) ||
+        summary.summary.trim() === ""
+      ) {
+        throw new Error(
+          `Invalid summary format or unexpected file path: ${JSON.stringify(
+            summary
+          )}`
+        );
+      }
+
+      const file = files.find((f) => f.path === summary.path);
+      if (!file) {
+        throw new Error(
+          `File path not found in the provided files array: ${summary.path}`
+        );
+      }
+
+      return {
+        id: file.id,
+        path: summary.path,
+        summary: summary.summary,
+      };
+    });
+
+    return parsedSummaries;
   } catch (error) {
     if (error instanceof Error) {
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
     }
-    return "Failed to generate shortSummary for files.";
+    throw error;
   }
-};
+}
 
 export const getRepositoryOverview = async (repositoryId: string) => {
   try {
