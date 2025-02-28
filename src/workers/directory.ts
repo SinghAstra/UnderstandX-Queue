@@ -8,6 +8,7 @@ import {
   FILE_BATCH_SIZE,
   QUEUES,
 } from "../lib/constants.js";
+import { getRepositoryOverview } from "../lib/gemini.js";
 import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
@@ -17,7 +18,7 @@ import { directoryQueue } from "../queues/repository.js";
 
 // Redis key prefixes for counters
 const ACTIVE_JOBS_KEY = "repository:active_jobs:";
-const PENDING_JOBS_KEY = "repository:pending_jobs:";
+export const PENDING_JOBS_KEY = "repository:pending_jobs:";
 
 async function updateRepositoryStatus(repositoryId: string) {
   const activeJobsKey = ACTIVE_JOBS_KEY + repositoryId;
@@ -31,9 +32,11 @@ async function updateRepositoryStatus(repositoryId: string) {
 
   // If no jobs are running or pending, mark as success
   if (activeCount === 0 && pendingCount === 0) {
+    const repoOverview = await getRepositoryOverview(repositoryId);
+
     await prisma.repository.update({
       where: { id: repositoryId },
-      data: { status: RepositoryStatus.SUCCESS },
+      data: { status: RepositoryStatus.SUCCESS, overview: repoOverview },
     });
 
     await sendProcessingUpdate(repositoryId, {
@@ -63,7 +66,8 @@ export const directoryWorker = new Worker(
     const pendingJobsKey = PENDING_JOBS_KEY + repositoryId;
 
     try {
-      // Increment active jobs counter
+      // Decrement pending jobs and increment active jobs
+      await redisConnection.decr(pendingJobsKey);
       await redisConnection.incr(activeJobsKey);
 
       // Fetch only the current directory level (do NOT recurse)
@@ -119,8 +123,8 @@ export const directoryWorker = new Worker(
               repositoryId,
               path: dir.path,
             });
-            // Decrement pending counter after successful queue
-            await redisConnection.decr(pendingJobsKey);
+            // Increment pending counter after successful queue
+            await redisConnection.incr(pendingJobsKey);
           } catch (error) {
             // If queuing fails, we need to adjust the pending counter
             throw error;
@@ -135,12 +139,6 @@ export const directoryWorker = new Worker(
         status: RepositoryStatus.PROCESSING,
         message: `Finished processing directory: ${path || "root"}`,
       });
-
-      // Decrement active jobs counter
-      await redisConnection.decr(activeJobsKey);
-
-      // Check if processing is complete
-      await updateRepositoryStatus(repositoryId);
 
       return { status: "SUCCESS", processed: items.length };
     } catch (error) {
@@ -163,6 +161,12 @@ export const directoryWorker = new Worker(
         status: RepositoryStatus.FAILED,
         message: `Failed to process directory: ${path || "root"}`,
       });
+    } finally {
+      // Decrement active jobs counter
+      await redisConnection.decr(activeJobsKey);
+
+      // Check if processing is complete
+      await updateRepositoryStatus(repositoryId);
     }
   },
   {
@@ -177,7 +181,6 @@ async function processFilesInBatches(
   currentPath: string,
   directoryId: string | null
 ) {
-  console.log("directoryId --processFilesInBatches is ", directoryId);
   try {
     await sendProcessingUpdate(repositoryId, {
       id: uuidv4(),
@@ -192,8 +195,6 @@ async function processFilesInBatches(
     for (let i = 0; i < files.length; i += FILE_BATCH_SIZE) {
       fileBatches.push(files.slice(i, i + FILE_BATCH_SIZE));
     }
-
-    // logger.info(`Total file batches: ${fileBatches.length}`);
 
     for (let i = 0; i < fileBatches.length; i++) {
       const batch = fileBatches[i];
@@ -213,29 +214,8 @@ async function processFilesInBatches(
         )
       );
 
-      const parsedCreatedFiles = createdFiles.map((createdFile) => {
-        return {
-          id: createdFile.id,
-          path: createdFile.path,
-          name: createdFile.name,
-          directoryId: createdFile.directoryId,
-          repositoryId: createdFile.repositoryId,
-          shortSummary: createdFile.shortSummary,
-        };
-      });
+      logger.info(`createdFiles.length is ${createdFiles.length}`);
 
-      console.log(
-        "parsedCreatedFiles is ",
-        parsedCreatedFiles,
-        "path is ",
-        currentPath === "" ? "ROOT" : currentPath,
-        "parentDirId: ",
-        directoryId
-      );
-
-      // logger.info(
-      //   `Saved batch ${i + 1}/${fileBatches.length} (${batch.length} files)`
-      // );
       await sendProcessingUpdate(repositoryId, {
         id: uuidv4(),
         timestamp: new Date(),
@@ -254,12 +234,6 @@ async function processFilesInBatches(
         currentPath || "root"
       }`,
     });
-
-    // logger.success(
-    //   `Successfully saved all ${files.length} files in batches for ${
-    //     currentPath || "root"
-    //   }`
-    // );
   } catch (error) {
     if (error instanceof Error) {
       logger.error(`handleLargeFileSet error: ${error.message}`);

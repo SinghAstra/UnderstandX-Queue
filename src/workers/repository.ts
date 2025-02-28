@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import { default as redisConnection } from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
+import { PENDING_JOBS_KEY } from "./directory.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
@@ -44,6 +45,9 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
+      // Increment pending jobs counter before queuing the root job
+      await redisConnection.incr(PENDING_JOBS_KEY + repositoryId);
+
       // Queue the root directory for processing
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,
@@ -67,6 +71,9 @@ export const repositoryWorker = new Worker(
       } else {
         logger.error(`Unknown repository worker error: ${error}`);
       }
+
+      // Decrement pending jobs counter if root job queuing failed
+      await redisConnection.decr(PENDING_JOBS_KEY + repositoryId);
 
       // Notify user about failure
       await sendProcessingUpdate(repositoryId, {

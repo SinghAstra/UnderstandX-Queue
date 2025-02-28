@@ -56,21 +56,20 @@ model VerificationToken {
 }
 
 model Repository {
-  id           String           @id @default(cuid())
-  name         String
-  owner        String
-  url          String
-  userId       String
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  avatarUrl    String
-  githubId     Int
-  status       RepositoryStatus @default(PENDING)
-  longSummary  String?
-  shortSummary String?
-  directories  Directory[]
-  files        File[]
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String           @id @default(cuid())
+  name        String
+  owner       String
+  url         String
+  userId      String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  avatarUrl   String
+  githubId    Int
+  status      RepositoryStatus @default(PENDING)
+  overview    String?
+  directories Directory[]
+  files       File[]
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Directory {
@@ -102,7 +101,6 @@ model File {
   repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }
 
-
 enum RepositoryStatus {
   PENDING
   PROCESSING
@@ -116,5 +114,3 @@ enum DirectoryStatus {
   SUCCESS
   FAILED
 }
-
-

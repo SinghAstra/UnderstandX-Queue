@@ -1,8 +1,8 @@
 import { Octokit } from "@octokit/rest";
 import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
+import { getFileShortSummary } from "./gemini.js";
 import { sendProcessingUpdate } from "./pusher/send-update.js";
-import { getFileShortSummary } from "./summarizeFile.js";
 
 const auth = process.env.GITHUB_ACCESS_TOKEN;
 
