@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
+import { acquireRateLimit } from "./rateLimiter.js";
 
 dotenv.config();
 
@@ -15,6 +16,8 @@ export const getFileShortSummary = async (
   fileContent: string
 ) => {
   try {
+    await acquireRateLimit();
+
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
@@ -25,6 +28,13 @@ export const getFileShortSummary = async (
     `;
 
     const result = await model.generateContent(prompt);
+
+    const fileInfo = {
+      filePath,
+      content: fileContent,
+    };
+
+    console.log("fileInfo is ", fileInfo);
     return result.response.text();
   } catch (err) {
     console.error("Error generating summary:", err);
