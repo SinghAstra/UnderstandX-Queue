@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@google/generative-ai": "^0.22.0",
     "@octokit/rest": "^21.1.1",
     "@prisma/client": "^6.3.1",
     "bullmq": "^5.40.4",

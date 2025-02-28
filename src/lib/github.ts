@@ -2,6 +2,7 @@ import { Octokit } from "@octokit/rest";
 import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import { sendProcessingUpdate } from "./pusher/send-update.js";
+import { getFileShortSummary } from "./summarizeFile.js";
 
 const auth = process.env.GITHUB_ACCESS_TOKEN;
 
@@ -92,11 +93,16 @@ export async function fetchGithubContent(
         });
 
         if ("content" in fileData) {
+          const content = Buffer.from(fileData.content, "base64").toString(
+            "utf-8"
+          );
+          const shortSummary = await getFileShortSummary(item.path, content);
           items.push({
             type: "file",
             name: item.name,
             path: item.path,
-            content: Buffer.from(fileData.content, "base64").toString("utf-8"),
+            content,
+            shortSummary,
           });
         }
 

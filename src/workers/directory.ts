@@ -207,6 +207,7 @@ async function processFilesInBatches(
               content: file.content || "",
               repositoryId,
               directoryId,
+              shortSummary: file.shortSummary,
             },
           })
         )
@@ -219,6 +220,7 @@ async function processFilesInBatches(
           name: createdFile.name,
           directoryId: createdFile.directoryId,
           repositoryId: createdFile.repositoryId,
+          shortSummary: createdFile.shortSummary,
         };
       });
 
