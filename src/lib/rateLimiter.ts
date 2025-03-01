@@ -1,21 +1,50 @@
-import { RateLimiter } from "limiter";
+import redisConnection from "./redis.js";
 
-// Configure based on your API's limits
-// For Gemini, start conservative and adjust as needed
-const REQUESTS_PER_MINUTE = 3;
+const REQUEST_LIMIT = 15; // max requests per minute
+const TOKEN_LIMIT = 1000000; // adjust based on your needs
 
-// Create a singleton limiter instance
-export const aiRequestLimiter = new RateLimiter({
-  tokensPerInterval: REQUESTS_PER_MINUTE,
-  interval: "minute",
-  fireImmediately: false, // This makes removeTokens() wait instead of failing
-});
+const RATE_LIMIT_KEY = "global:rate_limit";
 
-/**
- * Acquire a rate limit token before making an API call
- * @returns {Promise<void>} Resolves when a token is available
- */
-export async function acquireRateLimit(): Promise<void> {
-  // This will pause execution until a token is available
-  await aiRequestLimiter.removeTokens(1);
+export async function trackRequest(tokenCount: number) {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000); // round to the nearest minute
+
+  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+
+  const result = await redisConnection
+    .multi()
+    .incr(`${key}:requests`)
+    .incrby(`${key}:tokens`, tokenCount)
+    .expire(`${key}:requests`, 60)
+    .expire(`${key}:tokens`, 60)
+    .exec();
+
+  if (!result) {
+    throw new Error("Redis transaction failed");
+  }
+
+  const [requests, tokens] = result.map(([err, res]) => {
+    if (err) throw err;
+    return res;
+  });
+
+  return { requests, tokens };
+}
+
+export async function checkLimits() {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+
+  const [requests, tokens] = await redisConnection.mget(
+    `${key}:requests`,
+    `${key}:tokens`
+  );
+
+  return {
+    requests: parseInt(requests ?? "0"),
+    tokens: parseInt(tokens ?? "0"),
+    requestsExceeded: parseInt(requests ?? "0") >= REQUEST_LIMIT,
+    tokensExceeded: parseInt(tokens ?? "0") >= TOKEN_LIMIT,
+  };
 }
