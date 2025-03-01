@@ -294,10 +294,10 @@ async function processFilesInBatches(
     await sendProcessingUpdate(repositoryId, {
       id: uuidv4(),
       timestamp: new Date(),
-      status: RepositoryStatus.SUCCESS,
+      status: RepositoryStatus.PROCESSING,
       message: `Finished processing ${files.length} files in ${
         currentPath || "root"
-      }`,
+      }.`,
     });
   } catch (error) {
     if (error instanceof Error) {
