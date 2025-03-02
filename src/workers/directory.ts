@@ -5,11 +5,13 @@ import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
   CONCURRENT_PROCESSING,
+  FILE_BATCH_SIZE_FOR_AI_ANALYSIS,
   FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY,
   FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
 } from "../lib/constants.js";
 import {
+  generateBatchAnalysis,
   generateBatchSummaries,
   getRepositoryOverview,
 } from "../lib/gemini.js";
@@ -63,20 +65,18 @@ async function updateRepositoryStatus(repositoryId: string) {
       select: { id: true, path: true, content: true },
     });
 
-    const batchSize = FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY;
-    for (let i = 0; i < filesWithoutSummary.length; i += batchSize) {
-      const fileWithoutSummaryBatch = filesWithoutSummary
-        .slice(i, i + batchSize)
-        .filter((file) => file.content as string);
+    const batchSizeForShortSummary = FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY;
+    for (
+      let i = 0;
+      i < filesWithoutSummary.length;
+      i += batchSizeForShortSummary
+    ) {
+      const fileWithoutSummaryBatch = filesWithoutSummary.slice(
+        i,
+        i + batchSizeForShortSummary
+      );
 
-      const batchFileWithContent = fileWithoutSummaryBatch
-        .filter((file) => file.content !== null)
-        .map((file) => ({
-          ...file,
-          content: file.content as string,
-        }));
-
-      const summaries = await generateBatchSummaries(batchFileWithContent);
+      const summaries = await generateBatchSummaries(fileWithoutSummaryBatch);
       await prisma.$transaction(
         summaries.map((summary: { id: string; summary: string }) =>
           prisma.file.update({
@@ -91,12 +91,37 @@ async function updateRepositoryStatus(repositoryId: string) {
         timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Generated summaries for batch ${Math.ceil(
-          (i + batchSize) / batchSize
-        )} of ${Math.ceil(filesWithoutSummary.length / batchSize)}`,
+          (i + batchSizeForShortSummary) / batchSizeForShortSummary
+        )} of ${Math.ceil(
+          filesWithoutSummary.length / batchSizeForShortSummary
+        )}`,
       });
     }
 
     const repoOverview = await getRepositoryOverview(repositoryId);
+    const filesWithoutAnalysis = await prisma.file.findMany({
+      where: { repositoryId, analysis: null },
+      select: { id: true, path: true, content: true },
+    });
+
+    const batchSizeForAnalysis = FILE_BATCH_SIZE_FOR_AI_ANALYSIS;
+    for (
+      let i = 0;
+      i < filesWithoutAnalysis.length;
+      i += batchSizeForAnalysis
+    ) {
+      const fileWithoutSummaryBatch = filesWithoutSummary.slice(
+        i,
+        i + batchSizeForShortSummary
+      );
+      // .filter((file) => file.content as string);
+
+      const analysis = await generateBatchAnalysis(
+        repositoryId,
+        filesWithoutAnalysis,
+        repoOverview
+      );
+    }
 
     await prisma.repository.update({
       where: { id: repositoryId },

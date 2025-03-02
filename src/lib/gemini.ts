@@ -6,7 +6,7 @@ import redisConnection from "./redis.js";
 dotenv.config();
 
 const REQUEST_LIMIT = 15;
-const TOKEN_LIMIT = 1000000;
+const TOKEN_LIMIT = 800000;
 const RATE_LIMIT_KEY = "global:rate_limit";
 
 type Summary = {
@@ -106,7 +106,7 @@ export async function handleRateLimit(tokenCount: number) {
 }
 
 export async function generateBatchSummaries(
-  files: { id: string; path: string; content: string }[]
+  files: { id: string; path: string; content: string | null }[]
 ) {
   try {
     const filePaths = new Set(files.map((file) => file.path));
@@ -205,34 +205,31 @@ export async function getRepositoryOverview(repositoryId: string) {
       .join("\n");
 
     const prompt = `
-      You are a coding assistant tasked with generating a **structured MDX project overview** based on file summaries.
+      You are a coding assistant. Your task is to generate a **structured MDX project overview** based on the provided file summaries.
       
-      ## Formatting Guidelines:
-      - **Headings:** Use # for main headings, followed by ##, ###, etc. Don’t skip levels.
-      - **Spacing:** Add a blank line between headings, paragraphs, lists, and code blocks for readability.
-      - **Inline code:** Use backticks for small code snippets (\`example\`).
-      - **Code blocks:** Use triple backticks with the language specified (e.g., \`\`\`javascript).
-      - **Lists:** Use 1. for numbered lists and - for bullet points.
-      - **Tables:** Align columns with | and use --- for headers.
+      ## 📦 Project Overview Structure:
+      1. **Introduction:** 🎯 Briefly explain the purpose of the project, its goals, and its main use cases.
+      2. **Key Features:** 🌟 Highlight the project's core functionalities, referencing relevant files where appropriate.
+      3. **Architecture Overview:** 🏗️ Summarize how the key components interact — explain how data flows through the system.
+      4. **Conclusion:** ✅ Provide a final summary tying the features and architecture together.
       
-      ## Task:
-      Generate an MDX project overview following this structure:
-      1. **Introduction:** 🎯 Briefly explain the purpose of the project.
-      2. **Key Features:** 🌟 Highlight the main functionalities and their implementations.
-      3. **Conclusion:** Summarize the overall structure and how the components interact.
-
-      ## Formatting Guidelines:
-      - Use relevant **emojis** to enhance readability.
-
-      
-      ## File Summaries:
+      ## 🛠️ File Summaries:
       ${fileSummaries}
       
-      ### Important:
-      - **Output the MDX content directly** — do not wrap it in Markdown code blocks (like triple backticks).
-      - Be concise but informative.
+      ## 🚀 Guidelines:
+      - **MDX format:** Use proper heading levels (#, ##, ###).  
+      - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).  
+      - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.  
+      - **Emojis:** Add relevant emojis to make the overview engaging.  
+      - **No code block wrappers:** Do **not** use triple backticks for MDX content.  
+      - **Be concise yet insightful.** Don’t over-explain — aim for clarity.  
       
-      Please generate the project overview as a plain text string.
+      ## 🎯 Important:
+      - Ensure the output is **valid MDX**.
+      - The overview should **reference key files** from the provided summaries when relevant.
+      - **Directly output MDX content** without wrapping it in code blocks.
+      
+      Please generate the MDX project overview as plain text.
       `;
 
     const tokenCount = await estimateTokenCount(prompt);
@@ -252,5 +249,99 @@ export async function getRepositoryOverview(repositoryId: string) {
       console.log("error.message is ", error.message);
     }
     return "Failed to generate repository overview.";
+  }
+}
+
+export async function generateBatchAnalysis(
+  repositoryId: string,
+  filesWithoutAnalysis: { path: string; id: string; content: string | null }[],
+  repoOverview: string
+) {
+  try {
+    const files = await prisma.file.findMany({
+      where: { repositoryId },
+      select: { path: true, shortSummary: true },
+    });
+
+    const fileSummaries = files
+      .map(
+        (file) =>
+          `- ${file.path}: ${file.shortSummary || "No summary available"}`
+      )
+      .join("\n");
+
+    const prompt = `
+      You are a code analysis assistant. Your task is to provide **detailed insights** for each file in the repository. 
+      
+      ## 📦 Repository Overview:
+      ${repoOverview}
+      
+      ## 📚 File Summaries:
+      ${fileSummaries}
+      
+      ## 🎯 Task:
+      Analyze each file below in detail. Return the analysis as a **valid JSON array** where each object contains:
+      - **path:** The file path (string).
+      - **analysis:** A detailed analysis in **MDX format**.  
+      
+      ### Focus on:
+      1. **High-Level Overview:** Briefly explain the file's purpose.  
+      2. **Key Components:** Highlight important classes, functions, or data structures.  
+      3. **Usage:** Provide an example of how this file might be used.  
+      4. **Potential Issues:** Mention any challenges or suggest issues to raise.  
+      5. **Conclusion:** Summarize the file's role in the project.  
+      
+      ## 🚀 Formatting Guidelines:
+      - Use **emojis** to enhance readability.  
+      - **Directly output MDX content** for the analysis — do not wrap it in code blocks.  
+      - Ensure all analyses are **non-empty** and relevant to the file's content.
+      
+      ## ✅ Example Response:
+      \`\`\`json
+      [
+        {
+          "path": "src/utils.js",
+          "analysis": "### 🔧 High-Level Overview\nThe \`utils.js\` file defines helper functions for string manipulation, including \`capitalize\` and \`truncate\`.\n\n### 🏗️ Key Components\n- \`capitalize(text: string)\`\n- \`truncate(text: string, length: number)\`\n\n### 🚀 Usage\nThese functions are imported in \`main.js\` for formatting user inputs.\n\n### ⚠️ Potential Issues\nConsider adding unit tests for edge cases like empty strings.\n\n### ✅ Conclusion\nThis file provides essential utilities to format user data consistently."
+        },
+        {
+          "path": "src/api.js",
+          "analysis": "..."
+        }
+      ]
+      \`\`\`
+      
+      ## 🗂️ Files to Analyze:
+      ${filesWithoutAnalysis
+        .map(
+          (file) => `
+      path: ${file.path}
+      content:
+      ${file.content || "No content available"}
+      `
+        )
+        .join("\n")}
+      
+      **Important:**  
+      - Ensure the output is a **valid JSON array**.  
+      - Each file must have a **non-empty** \`analysis\`.  
+      `;
+
+    const tokenCount = await estimateTokenCount(prompt);
+    await handleRateLimit(tokenCount);
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const analyses = JSON.parse(result.response.text());
+  } catch (error) {
+    if (error instanceof Error) {
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
+    }
+    return "Failed to generate Batch Analysis.";
   }
 }
