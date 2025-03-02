@@ -204,12 +204,36 @@ export async function getRepositoryOverview(repositoryId: string) {
       )
       .join("\n");
 
-    // Construct the prompt
-    const prompt = `You are a code assistant. Based on the following file summaries, generate a structured overview of the repository:\n\n${fileSummaries}\n\nThe overview should answer the following points clearly:
-    Why this project exists: Explain the main purpose or problem this project aims to solve.
-    How the project functions: Describe the core logic, workflow, or architecture, mentioning how different components (files) interact.
-    What makes this project special: Highlight any unique features, innovative solutions, or interesting design choices.
-    Keep the explanation concise yet informative, maintaining a professional tone.`;
+    const prompt = `
+      You are a coding assistant tasked with generating a **structured MDX project overview** based on file summaries.
+      
+      ## Formatting Guidelines:
+      - **Headings:** Use # for main headings, followed by ##, ###, etc. Don’t skip levels.
+      - **Spacing:** Add a blank line between headings, paragraphs, lists, and code blocks for readability.
+      - **Inline code:** Use backticks for small code snippets (\`example\`).
+      - **Code blocks:** Use triple backticks with the language specified (e.g., \`\`\`javascript).
+      - **Lists:** Use 1. for numbered lists and - for bullet points.
+      - **Tables:** Align columns with | and use --- for headers.
+      
+      ## Task:
+      Generate an MDX project overview following this structure:
+      1. **Introduction:** 🎯 Briefly explain the purpose of the project.
+      2. **Key Features:** 🌟 Highlight the main functionalities and their implementations.
+      3. **Conclusion:** Summarize the overall structure and how the components interact.
+
+      ## Formatting Guidelines:
+      - Use relevant **emojis** to enhance readability.
+
+      
+      ## File Summaries:
+      ${fileSummaries}
+      
+      ### Important:
+      - **Output the MDX content directly** — do not wrap it in Markdown code blocks (like triple backticks).
+      - Be concise but informative.
+      
+      Please generate the project overview as a plain text string.
+      `;
 
     const tokenCount = await estimateTokenCount(prompt);
 
