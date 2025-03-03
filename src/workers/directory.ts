@@ -14,6 +14,7 @@ import {
   generateBatchAnalysis,
   generateBatchSummaries,
   getRepositoryOverview,
+  ParsedAnalysis,
 } from "../lib/gemini.js";
 import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
@@ -110,17 +111,34 @@ async function updateRepositoryStatus(repositoryId: string) {
       i < filesWithoutAnalysis.length;
       i += batchSizeForAnalysis
     ) {
-      const fileWithoutSummaryBatch = filesWithoutSummary.slice(
+      const filesWithoutAnalysisBatch = filesWithoutAnalysis.slice(
         i,
-        i + batchSizeForShortSummary
+        i + batchSizeForAnalysis
       );
-      // .filter((file) => file.content as string);
 
-      const analysis = await generateBatchAnalysis(
+      const analyses: ParsedAnalysis[] = await generateBatchAnalysis(
         repositoryId,
-        filesWithoutAnalysis,
+        filesWithoutAnalysisBatch,
         repoOverview
       );
+
+      await prisma.$transaction(
+        analyses.map((analysis) => {
+          return prisma.file.update({
+            where: { id: analysis.id },
+            data: { analysis: analysis.analysis },
+          });
+        })
+      );
+
+      await sendProcessingUpdate(repositoryId, {
+        id: uuidv4(),
+        timestamp: new Date(),
+        status: RepositoryStatus.PROCESSING,
+        message: `Generated Analysis for batch ${Math.ceil(
+          (i + batchSizeForAnalysis) / batchSizeForAnalysis
+        )} of ${Math.ceil(filesWithoutAnalysis.length / batchSizeForAnalysis)}`,
+      });
     }
 
     await prisma.repository.update({

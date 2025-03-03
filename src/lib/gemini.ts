@@ -14,6 +14,17 @@ type Summary = {
   summary: string;
 };
 
+type Analysis = {
+  path: string;
+  analysis: string;
+};
+
+export type ParsedAnalysis = {
+  id: string;
+  path: string;
+  analysis: string;
+};
+
 type ParsedSummary = {
   id: string;
   path: string;
@@ -248,7 +259,7 @@ export async function getRepositoryOverview(repositoryId: string) {
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
     }
-    return "Failed to generate repository overview.";
+    throw error;
   }
 }
 
@@ -258,6 +269,8 @@ export async function generateBatchAnalysis(
   repoOverview: string
 ) {
   try {
+    const filePaths = new Set(filesWithoutAnalysis.map((file) => file.path));
+
     const files = await prisma.file.findMany({
       where: { repositoryId },
       select: { path: true, shortSummary: true },
@@ -336,12 +349,44 @@ export async function generateBatchAnalysis(
       },
     });
 
-    const analyses = JSON.parse(result.response.text());
+    const analyses: Analysis[] = JSON.parse(result.response.text());
+
+    console.log("analyses are ", analyses);
+
+    const parsedAnalyses: ParsedAnalysis[] = analyses.map((analysis) => {
+      if (
+        typeof analysis !== "object" ||
+        typeof analysis.path !== "string" ||
+        typeof analysis.analysis !== "string" ||
+        !filePaths.has(analysis.path) ||
+        analysis.analysis.trim() === ""
+      ) {
+        throw new Error(
+          `Invalid summary format or unexpected file path: ${JSON.stringify(
+            analysis
+          )}`
+        );
+      }
+      const file = filesWithoutAnalysis.find((f) => f.path === analysis.path);
+      if (!file) {
+        throw new Error(
+          `File path not found in the provided files array: ${analysis.path}`
+        );
+      }
+
+      return {
+        id: file.id,
+        path: file.path,
+        analysis: analysis.analysis,
+      };
+    });
+
+    return parsedAnalyses;
   } catch (error) {
     if (error instanceof Error) {
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
     }
-    return "Failed to generate Batch Analysis.";
+    throw error;
   }
 }
