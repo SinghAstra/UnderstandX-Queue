@@ -1,21 +1,19 @@
-// import { GoogleGenerativeAI } from "@google/generative-ai";
 // import dotenv from "dotenv";
+// import OpenAI from "openai";
 // import { prisma } from "./prisma.js";
-// import redisConnection from "./redis.js";
 
 // dotenv.config();
 
-// const REQUEST_LIMIT = 15;
-// const TOKEN_LIMIT = 800000;
-// const RATE_LIMIT_KEY = "global:rate_limit";
+// if (!process.env.DEEP_SEEK_API_KEY) {
+//   throw new Error("Missing DEEP_SEEK_API_KEY environment variable.");
+// }
 
-// const MODEL_FALLBACKS = [
-//   "gemini-2.0-flash",
-//   "gemini-2.0-flash-lite",
-//   "gemini-1.5-flash",
-//   "gemini-1.5-pro",
-//   "gemini-1.5-flash-8b",
-// ];
+// const openai = new OpenAI({
+//   baseURL: "https://api.deepseek.com",
+//   apiKey: process.env.DEEP_SEEK_API_KEY,
+// });
+
+// const MODEL_FALLBACKS = ["deepseek-chat", "deepseek-reasoner"];
 // const MAX_RETRIES = MODEL_FALLBACKS.length;
 
 // type Summary = {
@@ -40,124 +38,16 @@
 //   summary: string;
 // };
 
-// if (!process.env.GEMINI_API_KEY) {
-//   throw new Error("Missing GEMINI_API_KEY environment variable.");
-// }
-
-// const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// export async function trackRequest(tokenCount: number) {
-//   const now = Date.now();
-//   const currentMinute = Math.floor(now / 60000);
-//   const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
-
-//   const result = await redisConnection
-//     .multi()
-//     .incr(`${key}:requests`)
-//     .incrby(`${key}:tokens`, tokenCount)
-//     .expire(`${key}:requests`, 60)
-//     .expire(`${key}:tokens`, 60)
-//     .exec();
-
-//   if (!result) {
-//     throw new Error("Redis transaction failed");
-//   }
-
-//   const [requests, tokens] = result.map(([err, res]) => {
-//     if (err) throw err;
-//     return res;
-//   });
-
-//   return { requests, tokens };
-// }
-
-// export async function checkLimits() {
-//   const now = Date.now();
-//   const currentMinute = Math.floor(now / 60000);
-//   const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
-
-//   const [requests, tokens] = await redisConnection.mget(
-//     `${key}:requests`,
-//     `${key}:tokens`
-//   );
-
-//   return {
-//     requests: parseInt(requests ?? "0"),
-//     tokens: parseInt(tokens ?? "0"),
-//     requestsExceeded: parseInt(requests ?? "0") >= REQUEST_LIMIT,
-//     tokensExceeded: parseInt(tokens ?? "0") >= TOKEN_LIMIT,
-//   };
-// }
-
-// async function waitForNextMinute() {
-//   const now = Date.now();
-//   const millisecondsUntilNextMinute = 60000 - (now % 60000);
-//   console.log(
-//     `Rate limit exceeded. Waiting for ${millisecondsUntilNextMinute}ms...`
-//   );
-//   await new Promise((resolve) =>
-//     setTimeout(resolve, millisecondsUntilNextMinute)
-//   );
-// }
-
-// export async function estimateTokenCount(
-//   prompt: string,
-//   maxOutputTokens = 1000
-// ) {
-//   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-//     const modelName = MODEL_FALLBACKS[attempt];
-//     const model = genAI.getGenerativeModel({ model: modelName });
-//     try {
-//       const inputTokenCount = await model.countTokens(prompt);
-//       return inputTokenCount.totalTokens + maxOutputTokens;
-//     } catch (error) {
-//       // rough estimate
-//       console.log(
-//         `Attempt ${attempt + 1} with ${modelName} failed: ${
-//           error instanceof Error && error.message
-//         }`
-//       );
-
-//       if (attempt + 1 === MAX_RETRIES) {
-//         throw new Error(`All retries (${MAX_RETRIES}) exhausted.`);
-//       }
-
-//       if (error instanceof Error) {
-//         console.log("error.stack is ", error.stack);
-//         console.log("error.message is ", error.message);
-//       }
-//     }
-//   }
-//   throw new Error("Could Not estimate token, maybe ai model is down.");
-// }
-
-// export async function handleRateLimit(tokenCount: number) {
-//   const limitsResponse = await checkLimits();
-
-//   console.log("--------------------------------------");
-//   console.log("limitsResponse:", limitsResponse);
-//   console.log("--------------------------------------");
-
-//   const { requestsExceeded, tokensExceeded } = limitsResponse;
-
-//   if (requestsExceeded || tokensExceeded) {
-//     await waitForNextMinute();
-//   }
-
-//   await trackRequest(tokenCount);
-// }
-
 // export async function generateBatchSummaries(
 //   files: { id: string; path: string; content: string | null }[]
 // ) {
 //   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 //     const modelName = MODEL_FALLBACKS[attempt];
-//     const model = genAI.getGenerativeModel({ model: modelName });
 //     try {
 //       const filePaths = new Set(files.map((file) => file.path));
 
 //       const prompt = `
-//       You are a code assistant. Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties. Example response:
+//       Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties. Example response:
 //       [
 //         {"path": "src/file1.js", "summary": "This file contains utility functions for string manipulation."},
 //         {"path": "src/file2.py", "summary": "This script processes CSV data and generates a report."}
@@ -175,20 +65,25 @@
 //         .join("\n")}
 //     `;
 
-//       const tokenCount = await estimateTokenCount(prompt);
-
-//       await handleRateLimit(tokenCount);
-
-//       const result = await model.generateContent({
-//         contents: [{ role: "user", parts: [{ text: prompt }] }],
-//         generationConfig: {
-//           responseMimeType: "application/json",
-//         },
+//       const result = await openai.chat.completions.create({
+//         messages: [
+//           { role: "system", content: "You are a code assistant." },
+//           { role: "user", content: prompt },
+//         ],
+//         model: modelName,
 //       });
 
-//       const summaries: Summary[] = JSON.parse(result.response.text());
+//       if (!result.choices[0].message.content) {
+//         throw new Error(
+//           "Invalid response from OpenAI model --generateBatchSummaries"
+//         );
+//       }
 
-//       console.log("summaries is ", summaries);
+//       const summaries: Summary[] = JSON.parse(
+//         result.choices[0].message.content
+//       );
+
+//       console.log("summaries --deepSeek is ", summaries);
 
 //       // First Perform the Check that are the summaries created properly
 //       // Summaries should be an array of object with two properties path and summary
@@ -249,7 +144,6 @@
 // export async function getRepositoryOverview(repositoryId: string) {
 //   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 //     const modelName = MODEL_FALLBACKS[attempt];
-//     const model = genAI.getGenerativeModel({ model: modelName });
 //     try {
 //       // Fetch all file paths and summaries
 //       const files = await prisma.file.findMany({
@@ -266,7 +160,7 @@
 //         .join("\n");
 
 //       const prompt = `
-//       You are a coding assistant. Your task is to generate a **structured MDX project overview** based on the provided file summaries.
+//       Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
 //       ## 📦 Project Overview Structure:
 //       1. **Introduction:** 🎯 Briefly explain the purpose of the project, its goals, and its main use cases.
@@ -293,15 +187,23 @@
 //       Please generate the MDX project overview as plain text.
 //       `;
 
-//       const tokenCount = await estimateTokenCount(prompt);
+//       const result = await openai.chat.completions.create({
+//         messages: [
+//           { role: "system", content: "You are a code assistant." },
+//           { role: "user", content: prompt },
+//         ],
+//         model: modelName,
+//       });
 
-//       await handleRateLimit(tokenCount);
+//       if (!result.choices[0].message.content) {
+//         throw new Error(
+//           "Invalid response from OpenAI model --generateBatchSummaries"
+//         );
+//       }
 
-//       const result = await model.generateContent(prompt);
+//       const repositoryOverview = result.choices[0].message.content;
 
-//       const repositoryOverview = result.response.text();
-
-//       console.log("repositoryOverview is ", repositoryOverview);
+//       console.log("repositoryOverview --deepSeek is ", repositoryOverview);
 
 //       return repositoryOverview;
 //     } catch (error) {
@@ -333,7 +235,6 @@
 // ) {
 //   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 //     const modelName = MODEL_FALLBACKS[attempt];
-//     const model = genAI.getGenerativeModel({ model: modelName });
 //     try {
 //       const filePaths = new Set(filesWithoutAnalysis.map((file) => file.path));
 
@@ -414,19 +315,25 @@
 //       - Ensure every file gets a **non-empty analysis**.
 //       "`;
 
-//       const tokenCount = await estimateTokenCount(prompt);
-//       await handleRateLimit(tokenCount);
-
-//       const result = await model.generateContent({
-//         contents: [{ role: "user", parts: [{ text: prompt }] }],
-//         generationConfig: {
-//           responseMimeType: "application/json",
-//         },
+//       const result = await openai.chat.completions.create({
+//         messages: [
+//           { role: "system", content: "You are a code assistant." },
+//           { role: "user", content: prompt },
+//         ],
+//         model: modelName,
 //       });
 
-//       const analyses: Analysis[] = JSON.parse(result.response.text());
+//       if (!result.choices[0].message.content) {
+//         throw new Error(
+//           "Invalid response from OpenAI model --generateBatchSummaries"
+//         );
+//       }
 
-//       console.log("analyses are ", analyses);
+//       const analyses: Analysis[] = JSON.parse(
+//         result.choices[0].message.content
+//       );
+
+//       console.log("analyses --deepSeek are ", analyses);
 
 //       const parsedAnalyses: ParsedAnalysis[] = analyses.map((analysis) => {
 //         if (

@@ -10,13 +10,13 @@ import {
   FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
 } from "../lib/constants.js";
+import { fetchGithubContent } from "../lib/github.js";
 import {
   generateBatchAnalysis,
   generateBatchSummaries,
   getRepositoryOverview,
   ParsedAnalysis,
-} from "../lib/gemini.js";
-import { fetchGithubContent } from "../lib/github.js";
+} from "../lib/groq.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
