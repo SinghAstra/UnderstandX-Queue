@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { File } from "@prisma/client";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
 import redisConnection from "./redis.js";
@@ -24,12 +25,6 @@ type Summary = {
 };
 
 type Analysis = {
-  path: string;
-  analysis: string;
-};
-
-export type ParsedAnalysis = {
-  id: string;
   path: string;
   analysis: string;
 };
@@ -326,16 +321,20 @@ export async function getRepositoryOverview(repositoryId: string) {
   );
 }
 
-export async function generateBatchAnalysis(
-  repositoryId: string,
-  filesWithoutAnalysis: { path: string; id: string; content: string | null }[],
-  repoOverview: string
-) {
+export async function generateFileAnalysis(repositoryId: string, file: File) {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const modelName = MODEL_FALLBACKS[attempt];
     const model = genAI.getGenerativeModel({ model: modelName });
     try {
-      const filePaths = new Set(filesWithoutAnalysis.map((file) => file.path));
+      const repository = await prisma.repository.findFirst({
+        where: {
+          id: repositoryId,
+        },
+      });
+
+      if (!repository) {
+        throw new Error(`Repository not found with id: ${repositoryId}`);
+      }
 
       const files = await prisma.file.findMany({
         where: { repositoryId },
@@ -350,19 +349,18 @@ export async function generateBatchAnalysis(
         .join("\n");
 
       const prompt = `
-      "I’m giving you a repo overview, short summaries of all files in the repo, and an array of files (with their paths and content) to analyze. I want you to explain each file like you’re writing a blog post for a curious beginner who’s excited to learn programming. Your explanation should include:
+      "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. Your explanation should include:
       - A beginner-friendly overview of what the file does in the repo.
-      - A breakdown of key programming concepts (e.g., loops, functions, async patterns) with simple examples or analogies (like comparing a loop to a conveyor belt).
       - Any underlying theory (e.g., OOP, algorithms like sorting, or data structures like arrays) and why it matters here.
+      - Detailed explanations of all variables and functions—why they exist and how they work.
       - The approach taken—why it’s coded this way, what problems it solves, and any trade-offs or alternatives worth considering.
       - Tips or insights to help a newbie understand and apply these ideas.
 
-      - Detailed explanations of all variables and functions—why they exist and how they work.
 
       Here’s the context:
       ## 📦 Repository Overview:
       ${
-        repoOverview ||
+        repository.overview ||
         "No overview provided—make reasonable guesses based on file paths and content."
       }
 
@@ -373,46 +371,24 @@ export async function generateBatchAnalysis(
       }
 
       ## 🎯 Task:
-      Analyze each file below in detail. For each, return the analysis as part of a **valid JSON array**, where each object has:
-      - **path:** The file path (string).
-      - **analysis:** A detailed explanation in **MDX format** - Aim for 300–500 words per file, adjusting based on complexity..
+      Analyze file below in detail. For return the analysis in **MDX format** - Aim for 300–700 words per file, adjusting based on complexity..
 
       ## 🚀 Formatting Guidelines:
       - Use **emojis** to make it fun and readable, Add emoji before the heading text.
       - Output **direct MDX content** for the analysis—no code blocks around it.
-      - Keep analyses **non-empty**, relevant, and tied to the file’s content or inferred purpose.
-      - If content is missing, base the analysis on the file’s role in the repo (guessed from its path and summaries).
       - If content is long, focus on key excerpts or its overall structure.
       - Where relevant, connect the file to others in the repo (e.g., imports or dependencies).
 
-      ## ✅ Example Response:
-      \`\`\`json
-      [
-        {
-          "path": "src/utils.js",
-          "analysis": "### 🔧 What’s This File Do?\nThe \`utils.js\` file is like a toolbox for string tricks, with functions like \`capitalize\` and \`truncate\`.\n\n### 🏗️ Key Concepts\n- **Functions:** Think of them as mini recipes—give them ingredients (parameters), and they cook up a result.\n- **String Manipulation:** It’s like editing a sentence with scissors and glue.\n\n### 🧠 Theory Time\nThis uses functional programming ideas—small, reusable tools instead of big, messy code.\n\n### 🎨 The Approach\nIt’s simple and focused, but could add error checks for empty strings.\n\n### 💡 Beginner Tip\nTry writing your own function to reverse a string!"
-        }
-      ]
-      \`\`\`
 
-      ## 🗂️ Files to Analyze:
-      ${filesWithoutAnalysis
-        .map(
-          (file) => `
+      ## 🗂️ File to Analyze:
+      ${`
       path: ${file.path}
       content:
       ${
         file.content ||
         "No content available—analyze based on path and repo context."
       }
-      `
-        )
-        .join("\n")}
-
-      **Important:**
-      - Output a **valid JSON array**.
-      - Ensure every file gets a **non-empty analysis**.
-      "`;
+      `}"`;
 
       const tokenCount = await estimateTokenCount(prompt);
       await handleRateLimit(tokenCount);
@@ -424,39 +400,13 @@ export async function generateBatchAnalysis(
         },
       });
 
-      const analyses: Analysis[] = JSON.parse(result.response.text());
+      const analysis: Analysis = JSON.parse(result.response.text());
 
-      console.log("analyses are ", analyses);
+      console.log("path --generateFileAnalysis is ", file.path);
 
-      const parsedAnalyses: ParsedAnalysis[] = analyses.map((analysis) => {
-        if (
-          typeof analysis !== "object" ||
-          typeof analysis.path !== "string" ||
-          typeof analysis.analysis !== "string" ||
-          !filePaths.has(analysis.path) ||
-          analysis.analysis.trim() === ""
-        ) {
-          throw new Error(
-            `Invalid summary format or unexpected file path: ${JSON.stringify(
-              analysis
-            )}`
-          );
-        }
-        const file = filesWithoutAnalysis.find((f) => f.path === analysis.path);
-        if (!file) {
-          throw new Error(
-            `File path not found in the provided files array: ${analysis.path}`
-          );
-        }
+      console.log("analysis is ", analysis);
 
-        return {
-          id: file.id,
-          path: file.path,
-          analysis: analysis.analysis,
-        };
-      });
-
-      return parsedAnalyses;
+      return analysis;
     } catch (error) {
       console.log(
         `Attempt ${attempt + 1} with ${modelName} failed: ${

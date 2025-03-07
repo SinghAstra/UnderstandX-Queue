@@ -71,7 +71,7 @@ async function generateRepositoryOverview(repositoryId: string) {
       analysisWorkerTotalJobsKey,
       filesWithoutAnalysis.length
     );
-    redisConnection.set(summaryWorkerCompletedJobsKey, 0);
+    redisConnection.set(analysisWorkerCompletedJobsKey, 0);
 
     filesWithoutAnalysis.map((file) => {
       analysisQueue.add(QUEUES.ANALYSIS, {
@@ -140,7 +140,7 @@ export const summaryWorker = new Worker(
         message: `Failed to generate short summary.`,
       });
     } finally {
-      generateRepositoryOverview(repositoryId);
+      await generateRepositoryOverview(repositoryId);
     }
   },
   {
