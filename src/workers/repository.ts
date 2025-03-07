@@ -6,15 +6,18 @@ import { parseGithubUrl } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
+import {
+  directoryWorkerCompletedJobsRedisKey,
+  directoryWorkerTotalJobsRedisKey,
+} from "../lib/redis-keys.js";
 import { default as redisConnection } from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
-import { PENDING_JOBS_KEY } from "./directory.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
   async (job) => {
     const startTime = Date.now();
-    const { repositoryId, githubUrl, userId } = job.data;
+    const { repositoryId, githubUrl } = job.data;
 
     try {
       const { owner, repo, isValid } = parseGithubUrl(githubUrl);
@@ -45,10 +48,15 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      // Increment pending jobs counter before queuing the root job
-      await redisConnection.incr(PENDING_JOBS_KEY + repositoryId);
+      await redisConnection.set(
+        directoryWorkerTotalJobsRedisKey + repositoryId,
+        "1"
+      );
+      await redisConnection.set(
+        directoryWorkerCompletedJobsRedisKey + repositoryId,
+        "0"
+      );
 
-      // Queue the root directory for processing
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,
         repo,
@@ -72,8 +80,12 @@ export const repositoryWorker = new Worker(
         logger.error(`Unknown repository worker error: ${error}`);
       }
 
-      // Decrement pending jobs counter if root job queuing failed
-      await redisConnection.decr(PENDING_JOBS_KEY + repositoryId);
+      await redisConnection.del(
+        directoryWorkerTotalJobsRedisKey + repositoryId
+      );
+      await redisConnection.del(
+        directoryWorkerCompletedJobsRedisKey + repositoryId
+      );
 
       // Notify user about failure
       await sendProcessingUpdate(repositoryId, {

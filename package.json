@@ -16,6 +16,7 @@
     "openai": "^4.86.1",
     "p-limit": "^6.2.0",
     "pusher": "^5.2.0",
+    "tiktoken": "^1.0.20",
     "uuid": "^11.1.0"
   },
   "name": "navx-queue",

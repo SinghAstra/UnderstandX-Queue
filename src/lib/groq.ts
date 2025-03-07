@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import Groq from "groq-sdk";
+import tiktoken from "tiktoken";
 import { prisma } from "./prisma.js";
+import redisConnection from "./redis.js";
 
 dotenv.config();
 
@@ -10,8 +12,11 @@ if (!process.env.GROQ_API_KEY) {
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const MODEL_FALLBACKS = ["llama-3.3-70b-versatile"];
+const MODEL_FALLBACKS = ["llama-3.3-70b-versatile", "llama-3.3-70b-specdec"];
 const MAX_RETRIES = MODEL_FALLBACKS.length;
+const REQUEST_LIMIT = 30;
+const TOKEN_LIMIT = 6000;
+const RATE_LIMIT_KEY = "global:rate_limit";
 
 type Summary = {
   path: string;
@@ -34,6 +39,81 @@ type ParsedSummary = {
   path: string;
   summary: string;
 };
+
+export async function trackRequest(tokenCount: number) {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+
+  const result = await redisConnection
+    .multi()
+    .incr(`${key}:requests`)
+    .incrby(`${key}:tokens`, tokenCount)
+    .expire(`${key}:requests`, 60)
+    .expire(`${key}:tokens`, 60)
+    .exec();
+
+  if (!result) {
+    throw new Error("Redis transaction failed");
+  }
+
+  const [requests, tokens] = result.map(([err, res]) => {
+    if (err) throw err;
+    return res;
+  });
+
+  return { requests, tokens };
+}
+
+export async function checkLimits() {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+
+  const [requests, tokens] = await redisConnection.mget(
+    `${key}:requests`,
+    `${key}:tokens`
+  );
+
+  return {
+    requests: parseInt(requests ?? "0"),
+    tokens: parseInt(tokens ?? "0"),
+    requestsExceeded: parseInt(requests ?? "0") >= REQUEST_LIMIT,
+    tokensExceeded: parseInt(tokens ?? "0") >= TOKEN_LIMIT,
+  };
+}
+
+async function waitForNextMinute() {
+  const now = Date.now();
+  const millisecondsUntilNextMinute = 60000 - (now % 60000);
+  console.log(
+    `Rate limit exceeded. Waiting for ${millisecondsUntilNextMinute}ms...`
+  );
+  await new Promise((resolve) =>
+    setTimeout(resolve, millisecondsUntilNextMinute)
+  );
+}
+
+function estimateTokenCount(prompt: string) {
+  const encoding = tiktoken.encoding_for_model("gpt-3.5-turbo");
+  return encoding.encode(prompt).length;
+}
+
+export async function handleRateLimit(tokenCount: number) {
+  const limitsResponse = await checkLimits();
+
+  console.log("--------------------------------------");
+  console.log("limitsResponse:", limitsResponse);
+  console.log("--------------------------------------");
+
+  const { requestsExceeded, tokensExceeded } = limitsResponse;
+
+  if (requestsExceeded || tokensExceeded) {
+    await waitForNextMinute();
+  }
+
+  await trackRequest(tokenCount);
+}
 
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
@@ -60,7 +140,13 @@ export async function generateBatchSummaries(
           `
         )
         .join("\n")}
+
+        CRITICAL: Respond ONLY with the JSON array. No explanation, no text before or after.
     `;
+
+      const tokenCount = estimateTokenCount(prompt);
+
+      await handleRateLimit(tokenCount);
 
       const result = await groq.chat.completions.create({
         messages: [
@@ -183,6 +269,10 @@ export async function getRepositoryOverview(repositoryId: string) {
       
       Please generate the MDX project overview as plain text.
       `;
+
+      const tokenCount = estimateTokenCount(prompt);
+
+      await handleRateLimit(tokenCount);
 
       const result = await groq.chat.completions.create({
         messages: [
@@ -310,7 +400,13 @@ export async function generateBatchAnalysis(
       **Important:**  
       - Output a **valid JSON array**.  
       - Ensure every file gets a **non-empty analysis**.  
+
+      CRITICAL: Respond ONLY with the JSON array. No explanation, no text before or after.
       "`;
+
+      const tokenCount = estimateTokenCount(prompt);
+
+      await handleRateLimit(tokenCount);
 
       const result = await groq.chat.completions.create({
         messages: [

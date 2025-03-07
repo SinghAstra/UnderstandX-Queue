@@ -1,6 +1,5 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { execPath } from "node:process";
 import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
@@ -10,45 +9,43 @@ import {
   FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
 } from "../lib/constants.js";
-import { fetchGithubContent } from "../lib/github.js";
 import {
   generateBatchAnalysis,
-  generateBatchSummaries,
   getRepositoryOverview,
   ParsedAnalysis,
-} from "../lib/groq.js";
+} from "../lib/gemini.js";
+import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
+import {
+  directoryWorkerCompletedJobsRedisKey,
+  directoryWorkerTotalJobsRedisKey,
+} from "../lib/redis-keys.js";
 import { default as redisConnection } from "../lib/redis.js";
-import { directoryQueue } from "../queues/repository.js";
-
-// Redis key prefixes for counters
-const ACTIVE_JOBS_KEY = "repository:active_jobs:";
-export const PENDING_JOBS_KEY = "repository:pending_jobs:";
+import { directoryQueue, summaryQueue } from "../queues/repository.js";
 
 let dirPath: string;
 
 async function updateRepositoryStatus(repositoryId: string) {
-  const activeJobsKey = ACTIVE_JOBS_KEY + repositoryId;
-  const pendingJobsKey = PENDING_JOBS_KEY + repositoryId;
-
-  const activeJobs = await redisConnection.get(activeJobsKey);
-  const pendingJobs = await redisConnection.get(pendingJobsKey);
-
-  const activeCount = parseInt(activeJobs || "0");
-  const pendingCount = parseInt(pendingJobs || "0");
+  const directoryWorkerCompletedJobs = await redisConnection.get(
+    directoryWorkerCompletedJobsRedisKey + repositoryId
+  );
+  const directoryWorkerTotalJobs = await redisConnection.get(
+    directoryWorkerTotalJobsRedisKey + repositoryId
+  );
 
   console.log("-------------------------------------------------------");
   console.log("dirPath is ", dirPath);
-  console.log("activeCount is ", activeCount);
-  console.log("pendingCount is ", pendingCount);
+  console.log("directoryWorkerCompletedJobs is ", directoryWorkerCompletedJobs);
+  console.log("directoryWorkerTotalJobs is ", directoryWorkerTotalJobs);
   console.log("-------------------------------------------------------");
 
-  // If no jobs are running or pending, mark as success
-  if (activeCount === 0 && pendingCount === 0) {
+  if (directoryWorkerCompletedJobs === directoryWorkerTotalJobs) {
     logger.info("-------------------------------------------------------");
-    logger.info("Inside the if of activeCount===0 && pendingCount===0");
+    logger.info(
+      "Inside the if of directoryWorkerCompletedJobs === directoryWorkerTotalJobs"
+    );
     logger.info(`dirPath is ${dirPath}`);
     logger.info("-------------------------------------------------------");
 
@@ -77,15 +74,20 @@ async function updateRepositoryStatus(repositoryId: string) {
         i + batchSizeForShortSummary
       );
 
-      const summaries = await generateBatchSummaries(fileWithoutSummaryBatch);
-      await prisma.$transaction(
-        summaries.map((summary: { id: string; summary: string }) =>
-          prisma.file.update({
-            where: { id: summary.id },
-            data: { shortSummary: summary.summary },
-          })
-        )
-      );
+      await summaryQueue.add(QUEUES.SUMMARY, {
+        repositoryId,
+        files: fileWithoutSummaryBatch,
+      });
+
+      // const summaries = await generateBatchSummaries(fileWithoutSummaryBatch);
+      // await prisma.$transaction(
+      //   summaries.map((summary: { id: string; summary: string }) =>
+      //     prisma.file.update({
+      //       where: { id: summary.id },
+      //       data: { shortSummary: summary.summary },
+      //     })
+      //   )
+      // );
 
       await sendProcessingUpdate(repositoryId, {
         id: uuidv4(),
@@ -160,8 +162,10 @@ async function updateRepositoryStatus(repositoryId: string) {
       message: "Repository processing completed",
     });
 
-    await redisConnection.del(activeJobsKey);
-    await redisConnection.del(pendingJobsKey);
+    await redisConnection.del(
+      directoryWorkerCompletedJobsRedisKey + repositoryId
+    );
+    await redisConnection.del(directoryWorkerTotalJobsRedisKey + repositoryId);
   }
 }
 

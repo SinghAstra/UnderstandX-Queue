@@ -5,4 +5,13 @@ import connection from "../lib/redis.js";
 export const repositoryQueue = new Queue(QUEUES.REPOSITORY, {
   connection,
 });
+
 export const directoryQueue = new Queue(QUEUES.DIRECTORY, { connection });
+
+export const summaryQueue = new Queue(QUEUES.SUMMARY, {
+  connection,
+});
+
+export const analysisQueue = new Queue(QUEUES.ANALYSIS, {
+  connection,
+});
