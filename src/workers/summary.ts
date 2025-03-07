@@ -1,27 +1,33 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
 import { v4 as uuid } from "uuid";
-import { FILE_BATCH_SIZE_FOR_AI_ANALYSIS, QUEUES } from "../lib/constants.js";
+import { QUEUES } from "../lib/constants.js";
 import {
-  generateBatchAnalysis,
   generateBatchSummaries,
   getRepositoryOverview,
-  ParsedAnalysis,
 } from "../lib/gemini.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
+  analysisWorkerCompletedJobsRedisKey,
+  analysisWorkerTotalJobsRedisKey,
   summaryWorkerCompletedJobsRedisKey,
   summaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisConnection from "../lib/redis.js";
+import { analysisQueue } from "../queues/repository.js";
 
 async function generateRepositoryOverview(repositoryId: string) {
   const summaryWorkerTotalJobsKey =
     summaryWorkerTotalJobsRedisKey + repositoryId;
   const summaryWorkerCompletedJobsKey =
     summaryWorkerCompletedJobsRedisKey + repositoryId;
+
+  const analysisWorkerTotalJobsKey =
+    analysisWorkerTotalJobsRedisKey + repositoryId;
+  const analysisWorkerCompletedJobsKey =
+    analysisWorkerCompletedJobsRedisKey + repositoryId;
 
   const summaryWorkerTotalJobs = await redisConnection.get(
     summaryWorkerTotalJobsKey
@@ -61,60 +67,21 @@ async function generateRepositoryOverview(repositoryId: string) {
       select: { id: true, path: true, content: true },
     });
 
-    const batchSizeForAnalysis = FILE_BATCH_SIZE_FOR_AI_ANALYSIS;
-    for (
-      let i = 0;
-      i < filesWithoutAnalysis.length;
-      i += batchSizeForAnalysis
-    ) {
-      const filesWithoutAnalysisBatch = filesWithoutAnalysis.slice(
-        i,
-        i + batchSizeForAnalysis
-      );
+    redisConnection.set(
+      analysisWorkerTotalJobsKey,
+      filesWithoutAnalysis.length
+    );
+    redisConnection.set(summaryWorkerCompletedJobsKey, 0);
 
-      const analyses: ParsedAnalysis[] = await generateBatchAnalysis(
+    filesWithoutAnalysis.map((file) => {
+      analysisQueue.add(QUEUES.ANALYSIS, {
         repositoryId,
-        filesWithoutAnalysisBatch,
-        repoOverview
-      );
-
-      await prisma.$transaction(
-        analyses.map((analysis) => {
-          return prisma.file.update({
-            where: { id: analysis.id },
-            data: { analysis: analysis.analysis },
-          });
-        })
-      );
-
-      await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
-        status: RepositoryStatus.PROCESSING,
-        message: `Generated Analysis for batch ${Math.ceil(
-          (i + batchSizeForAnalysis) / batchSizeForAnalysis
-        )} of ${Math.ceil(filesWithoutAnalysis.length / batchSizeForAnalysis)}`,
+        file,
       });
-    }
-
-    await prisma.repository.update({
-      where: { id: repositoryId },
-      data: { status: RepositoryStatus.SUCCESS },
     });
 
-    await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
-      status: RepositoryStatus.SUCCESS,
-      message: "Please Wait For Few more seconds ...",
-    });
-
-    await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
-      status: RepositoryStatus.SUCCESS,
-      message: "Repository processing completed",
-    });
+    await redisConnection.del(summaryWorkerCompletedJobsKey);
+    await redisConnection.del(summaryWorkerTotalJobsKey);
   }
 }
 
@@ -172,6 +139,8 @@ export const summaryWorker = new Worker(
         status: RepositoryStatus.FAILED,
         message: `Failed to generate short summary.`,
       });
+    } finally {
+      generateRepositoryOverview(repositoryId);
     }
   },
   {

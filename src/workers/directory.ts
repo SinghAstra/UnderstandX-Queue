@@ -1,19 +1,13 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuid } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
   CONCURRENT_PROCESSING,
-  FILE_BATCH_SIZE_FOR_AI_ANALYSIS,
   FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY,
   FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
 } from "../lib/constants.js";
-import {
-  generateBatchAnalysis,
-  getRepositoryOverview,
-  ParsedAnalysis,
-} from "../lib/gemini.js";
 import { fetchGithubContent } from "../lib/github.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
@@ -21,6 +15,7 @@ import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   directoryWorkerCompletedJobsRedisKey,
   directoryWorkerTotalJobsRedisKey,
+  summaryWorkerCompletedJobsRedisKey,
   summaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import { default as redisConnection } from "../lib/redis.js";
@@ -37,6 +32,9 @@ async function startSummaryWorker(repositoryId: string) {
 
   const summaryWorkerTotalJobsKey =
     summaryWorkerTotalJobsRedisKey + repositoryId;
+
+  const summaryWorkerCompletedJobsKey =
+    summaryWorkerCompletedJobsRedisKey + repositoryId;
 
   const directoryWorkerCompletedJobs = await redisConnection.get(
     directoryWorkerCompletedJobsKey
@@ -61,7 +59,7 @@ async function startSummaryWorker(repositoryId: string) {
 
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
+      id: uuid(),
       timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
       message: "Starting to generate file summaries...",
@@ -79,6 +77,7 @@ async function startSummaryWorker(repositoryId: string) {
     );
 
     redisConnection.set(summaryWorkerTotalJobsKey, totalBatchesForShortSummary);
+    redisConnection.set(summaryWorkerCompletedJobsKey, 0);
 
     for (
       let i = 0;
@@ -118,7 +117,7 @@ export const directoryWorker = new Worker(
 
       // Notify frontend that this directory is being processed
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Processing directory: ${path || "root"}`,
@@ -173,7 +172,7 @@ export const directoryWorker = new Worker(
 
       // Notify user that this directory is fully processed
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Finished processing directory: ${path || "root"}`,
@@ -197,7 +196,7 @@ export const directoryWorker = new Worker(
 
       // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.FAILED,
         message: `Failed to process directory: ${path || "root"}`,
@@ -221,7 +220,7 @@ async function processFilesInBatches(
 ) {
   try {
     await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
+      id: uuid(),
       timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
       message: `Processing ${files.length} files in batches for ${
@@ -260,7 +259,7 @@ async function processFilesInBatches(
       logger.info(`createdFiles.length is ${createdFiles.length}`);
 
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Saved batch ${i + 1}/${fileBatches.length} (${
@@ -270,7 +269,7 @@ async function processFilesInBatches(
     }
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
+      id: uuid(),
       timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
       message: `Finished processing ${files.length} files in ${
@@ -286,7 +285,7 @@ async function processFilesInBatches(
     }
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
+      id: uuid(),
       timestamp: new Date(),
       status: RepositoryStatus.FAILED,
       message: `Failed to save files in ${
