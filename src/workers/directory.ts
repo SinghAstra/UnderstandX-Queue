@@ -21,18 +21,28 @@ import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   directoryWorkerCompletedJobsRedisKey,
   directoryWorkerTotalJobsRedisKey,
+  summaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import { default as redisConnection } from "../lib/redis.js";
 import { directoryQueue, summaryQueue } from "../queues/repository.js";
 
 let dirPath: string;
 
-async function updateRepositoryStatus(repositoryId: string) {
+async function startSummaryWorker(repositoryId: string) {
+  const directoryWorkerTotalJobsKey =
+    directoryWorkerTotalJobsRedisKey + repositoryId;
+
+  const directoryWorkerCompletedJobsKey =
+    directoryWorkerCompletedJobsRedisKey + repositoryId;
+
+  const summaryWorkerTotalJobsKey =
+    summaryWorkerTotalJobsRedisKey + repositoryId;
+
   const directoryWorkerCompletedJobs = await redisConnection.get(
-    directoryWorkerCompletedJobsRedisKey + repositoryId
+    directoryWorkerCompletedJobsKey
   );
   const directoryWorkerTotalJobs = await redisConnection.get(
-    directoryWorkerTotalJobsRedisKey + repositoryId
+    directoryWorkerTotalJobsKey
   );
 
   console.log("-------------------------------------------------------");
@@ -64,6 +74,12 @@ async function updateRepositoryStatus(repositoryId: string) {
     });
 
     const batchSizeForShortSummary = FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY;
+    const totalBatchesForShortSummary = Math.ceil(
+      filesWithoutSummary.length / batchSizeForShortSummary
+    );
+
+    redisConnection.set(summaryWorkerTotalJobsKey, totalBatchesForShortSummary);
+
     for (
       let i = 0;
       i < filesWithoutSummary.length;
@@ -78,94 +94,10 @@ async function updateRepositoryStatus(repositoryId: string) {
         repositoryId,
         files: fileWithoutSummaryBatch,
       });
-
-      // const summaries = await generateBatchSummaries(fileWithoutSummaryBatch);
-      // await prisma.$transaction(
-      //   summaries.map((summary: { id: string; summary: string }) =>
-      //     prisma.file.update({
-      //       where: { id: summary.id },
-      //       data: { shortSummary: summary.summary },
-      //     })
-      //   )
-      // );
-
-      await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
-        timestamp: new Date(),
-        status: RepositoryStatus.PROCESSING,
-        message: `Generated summaries for batch ${Math.ceil(
-          (i + batchSizeForShortSummary) / batchSizeForShortSummary
-        )} of ${Math.ceil(
-          filesWithoutSummary.length / batchSizeForShortSummary
-        )}`,
-      });
     }
 
-    const repoOverview = await getRepositoryOverview(repositoryId);
-    const filesWithoutAnalysis = await prisma.file.findMany({
-      where: { repositoryId, analysis: null },
-      select: { id: true, path: true, content: true },
-    });
-
-    const batchSizeForAnalysis = FILE_BATCH_SIZE_FOR_AI_ANALYSIS;
-    for (
-      let i = 0;
-      i < filesWithoutAnalysis.length;
-      i += batchSizeForAnalysis
-    ) {
-      const filesWithoutAnalysisBatch = filesWithoutAnalysis.slice(
-        i,
-        i + batchSizeForAnalysis
-      );
-
-      const analyses: ParsedAnalysis[] = await generateBatchAnalysis(
-        repositoryId,
-        filesWithoutAnalysisBatch,
-        repoOverview
-      );
-
-      await prisma.$transaction(
-        analyses.map((analysis) => {
-          return prisma.file.update({
-            where: { id: analysis.id },
-            data: { analysis: analysis.analysis },
-          });
-        })
-      );
-
-      await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
-        timestamp: new Date(),
-        status: RepositoryStatus.PROCESSING,
-        message: `Generated Analysis for batch ${Math.ceil(
-          (i + batchSizeForAnalysis) / batchSizeForAnalysis
-        )} of ${Math.ceil(filesWithoutAnalysis.length / batchSizeForAnalysis)}`,
-      });
-    }
-
-    await prisma.repository.update({
-      where: { id: repositoryId },
-      data: { status: RepositoryStatus.SUCCESS, overview: repoOverview },
-    });
-
-    await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
-      timestamp: new Date(),
-      status: RepositoryStatus.SUCCESS,
-      message: "Please Wait For Few more seconds ...",
-    });
-
-    await sendProcessingUpdate(repositoryId, {
-      id: uuidv4(),
-      timestamp: new Date(),
-      status: RepositoryStatus.SUCCESS,
-      message: "Repository processing completed",
-    });
-
-    await redisConnection.del(
-      directoryWorkerCompletedJobsRedisKey + repositoryId
-    );
-    await redisConnection.del(directoryWorkerTotalJobsRedisKey + repositoryId);
+    await redisConnection.del(directoryWorkerCompletedJobsKey);
+    await redisConnection.del(directoryWorkerTotalJobsKey);
   }
 }
 
@@ -174,14 +106,13 @@ export const directoryWorker = new Worker(
   async (job) => {
     const { owner, repo, repositoryId, path } = job.data;
     dirPath = path;
-    const activeJobsKey = ACTIVE_JOBS_KEY + repositoryId;
-    const pendingJobsKey = PENDING_JOBS_KEY + repositoryId;
+    const directoryWorkerTotalJobsKey =
+      directoryWorkerTotalJobsRedisKey + repositoryId;
+
+    const directoryWorkerCompletedJobsKey =
+      directoryWorkerCompletedJobsRedisKey + repositoryId;
 
     try {
-      // Decrement pending jobs and increment active jobs
-      await redisConnection.decr(pendingJobsKey);
-      await redisConnection.incr(activeJobsKey);
-
       // Fetch only the current directory level (do NOT recurse)
       const items = await fetchGithubContent(owner, repo, path, repositoryId);
 
@@ -195,6 +126,9 @@ export const directoryWorker = new Worker(
 
       const directories = items.filter((item) => item.type === "dir");
       const files = items.filter((item) => item.type === "file");
+
+      // Update the directory Worker Total Jobs
+      redisConnection.incrby(directoryWorkerTotalJobsKey, directories.length);
 
       const directory = await prisma.directory.findFirst({
         where: {
@@ -230,8 +164,6 @@ export const directoryWorker = new Worker(
               repositoryId,
               path: dir.path,
             });
-            // Increment pending counter after successful queue
-            await redisConnection.incr(pendingJobsKey);
           } catch (error) {
             // If queuing fails, we need to adjust the pending counter
             throw error;
@@ -246,6 +178,8 @@ export const directoryWorker = new Worker(
         status: RepositoryStatus.PROCESSING,
         message: `Finished processing directory: ${path || "root"}`,
       });
+
+      await redisConnection.incr(directoryWorkerCompletedJobsKey);
 
       return { status: "SUCCESS", processed: items.length };
     } catch (error) {
@@ -269,11 +203,8 @@ export const directoryWorker = new Worker(
         message: `Failed to process directory: ${path || "root"}`,
       });
     } finally {
-      // Decrement active jobs counter
-      await redisConnection.decr(activeJobsKey);
-
       // Check if processing is complete
-      await updateRepositoryStatus(repositoryId);
+      await startSummaryWorker(repositoryId);
     }
   },
   {
