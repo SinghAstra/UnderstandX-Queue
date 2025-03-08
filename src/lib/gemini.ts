@@ -40,16 +40,7 @@ if (!process.env.GEMINI_API_KEYS) {
 }
 
 const keys = process.env.GEMINI_API_KEYS.split(",");
-let currentKeyIndex = 0;
-
-function getNextGeminiAPIKey() {
-  const key = keys[currentKeyIndex];
-  currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-  return key;
-}
-
-function createGenAIClient() {
-  const apiKey = getNextGeminiAPIKey();
+function createGenAIClient(apiKey: string) {
   return new GoogleGenerativeAI(apiKey);
 }
 
@@ -111,29 +102,33 @@ export async function estimateTokenCount(
   prompt: string,
   maxOutputTokens = 1000
 ) {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const modelName = MODEL_FALLBACKS[attempt];
-    const model = createGenAIClient().getGenerativeModel({ model: modelName });
-    try {
-      const inputTokenCount = await model.countTokens(prompt);
-      return inputTokenCount.totalTokens + maxOutputTokens;
-    } catch (error) {
-      // rough estimate
-      console.log(
-        `Attempt ${attempt + 1} with ${modelName} failed: ${
-          error instanceof Error && error.message
-        }`
-      );
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+    const apiKey = keys[keyIndex];
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const modelName = MODEL_FALLBACKS[attempt];
+      const model = createGenAIClient(apiKey).getGenerativeModel({
+        model: modelName,
+      });
+      try {
+        const inputTokenCount = await model.countTokens(prompt);
+        return inputTokenCount.totalTokens + maxOutputTokens;
+      } catch (error) {
+        // rough estimate
+        console.log(
+          `Attempt ${attempt + 1} with ${modelName} failed: ${
+            error instanceof Error && error.message
+          }`
+        );
 
-      if (attempt + 1 === MAX_RETRIES) {
-        logger.error(`All retries (${MAX_RETRIES}) exhausted.`);
-      }
-
-      if (error instanceof Error) {
-        console.log("error.stack is ", error.stack);
-        console.log("error.message is ", error.message);
+        if (error instanceof Error) {
+          console.log("error.stack is ", error.stack);
+          console.log("error.message is ", error.message);
+        }
       }
     }
+    logger.error(
+      `In estimateTokenCount exhausted all models with keyIndex ${keyIndex}`
+    );
   }
   throw new Error("Could Not estimate token, maybe ai model is down.");
 }
@@ -157,13 +152,17 @@ export async function handleRateLimit(tokenCount: number) {
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const modelName = MODEL_FALLBACKS[attempt];
-    const model = createGenAIClient().getGenerativeModel({ model: modelName });
-    try {
-      const filePaths = new Set(files.map((file) => file.path));
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+    const apiKey = keys[keyIndex];
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const modelName = MODEL_FALLBACKS[attempt];
+      const model = createGenAIClient(apiKey).getGenerativeModel({
+        model: modelName,
+      });
+      try {
+        const filePaths = new Set(files.map((file) => file.path));
 
-      const prompt = `
+        const prompt = `
       You are a code assistant. Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties. Example response:
       [
         {"path": "src/file1.js", "summary": "This file contains utility functions for string manipulation."},
@@ -182,71 +181,71 @@ export async function generateBatchSummaries(
         .join("\n")}
     `;
 
-      const tokenCount = await estimateTokenCount(prompt);
+        const tokenCount = await estimateTokenCount(prompt);
 
-      await handleRateLimit(tokenCount);
+        await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-        },
-      });
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        });
 
-      const summaries: Summary[] = JSON.parse(result.response.text());
+        const summaries: Summary[] = JSON.parse(result.response.text());
 
-      console.log("summaries is ", summaries);
+        console.log("summaries is ", summaries);
 
-      // First Perform the Check that are the summaries created properly
-      // Summaries should be an array of object with two properties path and summary
-      // Check if the path is present in the files array and if the summary is not empty
-      // If any of the checks fails, throw an error with the problematic file path
-      const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
-        if (
-          typeof summary !== "object" ||
-          typeof summary.path !== "string" ||
-          typeof summary.summary !== "string" ||
-          !filePaths.has(summary.path) ||
-          summary.summary.trim() === ""
-        ) {
-          throw new Error(
-            `Invalid summary format or unexpected file path: ${JSON.stringify(
-              summary
-            )}`
-          );
+        // First Perform the Check that are the summaries created properly
+        // Summaries should be an array of object with two properties path and summary
+        // Check if the path is present in the files array and if the summary is not empty
+        // If any of the checks fails, throw an error with the problematic file path
+        const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
+          if (
+            typeof summary !== "object" ||
+            typeof summary.path !== "string" ||
+            typeof summary.summary !== "string" ||
+            !filePaths.has(summary.path) ||
+            summary.summary.trim() === ""
+          ) {
+            throw new Error(
+              `Invalid summary format or unexpected file path: ${JSON.stringify(
+                summary
+              )}`
+            );
+          }
+
+          const file = files.find((f) => f.path === summary.path);
+          if (!file) {
+            throw new Error(
+              `File path not found in the provided files array: ${summary.path}`
+            );
+          }
+
+          return {
+            id: file.id,
+            path: summary.path,
+            summary: summary.summary,
+          };
+        });
+
+        return parsedSummaries;
+      } catch (error) {
+        console.log(
+          `Attempt ${attempt + 1} with ${modelName} failed: ${
+            error instanceof Error && error.message
+          }`
+        );
+
+        if (error instanceof Error) {
+          console.log("error.stack is ", error.stack);
+          console.log("error.message is ", error.message);
         }
-
-        const file = files.find((f) => f.path === summary.path);
-        if (!file) {
-          throw new Error(
-            `File path not found in the provided files array: ${summary.path}`
-          );
-        }
-
-        return {
-          id: file.id,
-          path: summary.path,
-          summary: summary.summary,
-        };
-      });
-
-      return parsedSummaries;
-    } catch (error) {
-      console.log(
-        `Attempt ${attempt + 1} with ${modelName} failed: ${
-          error instanceof Error && error.message
-        }`
-      );
-
-      if (attempt + 1 === MAX_RETRIES) {
-        throw new Error(`All retries (${MAX_RETRIES}) exhausted.`);
-      }
-
-      if (error instanceof Error) {
-        console.log("error.stack is ", error.stack);
-        console.log("error.message is ", error.message);
       }
     }
+    logger.error(
+      `In generateBatchSummaries exhausted all models with keyIndex ${keyIndex}`
+    );
   }
   throw new Error(
     "Could Not generate batch summaries, maybe ai model is down."
@@ -254,25 +253,29 @@ export async function generateBatchSummaries(
 }
 
 export async function getRepositoryOverview(repositoryId: string) {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const modelName = MODEL_FALLBACKS[attempt];
-    const model = createGenAIClient().getGenerativeModel({ model: modelName });
-    try {
-      // Fetch all file paths and summaries
-      const files = await prisma.file.findMany({
-        where: { repositoryId },
-        select: { path: true, shortSummary: true },
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+    const apiKey = keys[keyIndex];
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const modelName = MODEL_FALLBACKS[attempt];
+      const model = createGenAIClient(apiKey).getGenerativeModel({
+        model: modelName,
       });
+      try {
+        // Fetch all file paths and summaries
+        const files = await prisma.file.findMany({
+          where: { repositoryId },
+          select: { path: true, shortSummary: true },
+        });
 
-      // Format file summaries for the prompt
-      const fileSummaries = files
-        .map(
-          (file) =>
-            `- ${file.path}: ${file.shortSummary || "No summary available"}`
-        )
-        .join("\n");
+        // Format file summaries for the prompt
+        const fileSummaries = files
+          .map(
+            (file) =>
+              `- ${file.path}: ${file.shortSummary || "No summary available"}`
+          )
+          .join("\n");
 
-      const prompt = `
+        const prompt = `
       You are a coding assistant. Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
       ## 📦 Project Overview Structure:
@@ -300,33 +303,33 @@ export async function getRepositoryOverview(repositoryId: string) {
       Please generate the MDX project overview as plain text.
       `;
 
-      const tokenCount = await estimateTokenCount(prompt);
+        const tokenCount = await estimateTokenCount(prompt);
 
-      await handleRateLimit(tokenCount);
+        await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent(prompt);
+        const result = await model.generateContent(prompt);
 
-      const repositoryOverview = result.response.text();
+        const repositoryOverview = result.response.text();
 
-      console.log("repositoryOverview is ", repositoryOverview);
+        console.log("repositoryOverview is ", repositoryOverview);
 
-      return repositoryOverview;
-    } catch (error) {
-      console.log(
-        `Attempt ${attempt + 1} with ${modelName} failed: ${
-          error instanceof Error && error.message
-        }`
-      );
+        return repositoryOverview;
+      } catch (error) {
+        console.log(
+          `Attempt ${attempt + 1} with ${modelName} failed: ${
+            error instanceof Error && error.message
+          }`
+        );
 
-      if (attempt + 1 === MAX_RETRIES) {
-        throw new Error(`All retries (${MAX_RETRIES}) exhausted.`);
-      }
-
-      if (error instanceof Error) {
-        console.log("error.stack is ", error.stack);
-        console.log("error.message is ", error.message);
+        if (error instanceof Error) {
+          console.log("error.stack is ", error.stack);
+          console.log("error.message is ", error.message);
+        }
       }
     }
+    logger.error(
+      `In getRepositoryOverview exhausted all models with keyIndex ${keyIndex}`
+    );
   }
   throw new Error(
     "Could Not generate Repository overview, maybe ai model is down."
@@ -334,33 +337,37 @@ export async function getRepositoryOverview(repositoryId: string) {
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const modelName = MODEL_FALLBACKS[attempt];
-    const model = createGenAIClient().getGenerativeModel({ model: modelName });
-    try {
-      const repository = await prisma.repository.findFirst({
-        where: {
-          id: repositoryId,
-        },
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+    const apiKey = keys[keyIndex];
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const modelName = MODEL_FALLBACKS[attempt];
+      const model = createGenAIClient(apiKey).getGenerativeModel({
+        model: modelName,
       });
+      try {
+        const repository = await prisma.repository.findFirst({
+          where: {
+            id: repositoryId,
+          },
+        });
 
-      if (!repository) {
-        throw new Error(`Repository not found with id: ${repositoryId}`);
-      }
+        if (!repository) {
+          throw new Error(`Repository not found with id: ${repositoryId}`);
+        }
 
-      const files = await prisma.file.findMany({
-        where: { repositoryId },
-        select: { path: true, shortSummary: true },
-      });
+        const files = await prisma.file.findMany({
+          where: { repositoryId },
+          select: { path: true, shortSummary: true },
+        });
 
-      const fileSummaries = files
-        .map(
-          (file) =>
-            `- ${file.path}: ${file.shortSummary || "No summary available"}`
-        )
-        .join("\n");
+        const fileSummaries = files
+          .map(
+            (file) =>
+              `- ${file.path}: ${file.shortSummary || "No summary available"}`
+          )
+          .join("\n");
 
-      const prompt = `
+        const prompt = `
       "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. Your explanation should include:
       - A beginner-friendly overview of what the file does in the repo.
       - Any underlying theory (e.g., OOP, algorithms like sorting, or data structures like arrays) and why it matters here.
@@ -413,46 +420,46 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       This is just a taste—your analysis should expand on this style!
       "`;
 
-      const tokenCount = await estimateTokenCount(prompt);
-      await handleRateLimit(tokenCount);
+        const tokenCount = await estimateTokenCount(prompt);
+        await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-        },
-      });
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        });
 
-      const analysis: Analysis = JSON.parse(result.response.text());
+        const analysis: Analysis = JSON.parse(result.response.text());
 
-      if (analysis.path !== file.path) {
-        throw new Error(
-          `Path in analysis does not match file path. Analysis path: ${analysis.path}, file path: ${file.path}`
+        if (analysis.path !== file.path) {
+          throw new Error(
+            `Path in analysis does not match file path. Analysis path: ${analysis.path}, file path: ${file.path}`
+          );
+        }
+
+        console.log("path --generateFileAnalysis is ", file.path);
+        console.log("typeof analysis is ", typeof analysis);
+
+        // console.log("analysis is ", analysis);
+
+        return analysis.analysis;
+      } catch (error) {
+        console.log(
+          `Attempt ${attempt + 1} with ${modelName} failed: ${
+            error instanceof Error && error.message
+          }`
         );
-      }
 
-      console.log("path --generateFileAnalysis is ", file.path);
-      console.log("typeof analysis is ", typeof analysis);
-
-      // console.log("analysis is ", analysis);
-
-      return analysis.analysis;
-    } catch (error) {
-      console.log(
-        `Attempt ${attempt + 1} with ${modelName} failed: ${
-          error instanceof Error && error.message
-        }`
-      );
-
-      if (attempt + 1 === MAX_RETRIES) {
-        throw new Error(`All retries (${MAX_RETRIES}) exhausted.`);
-      }
-
-      if (error instanceof Error) {
-        console.log("error.stack is ", error.stack);
-        console.log("error.message is ", error.message);
+        if (error instanceof Error) {
+          console.log("error.stack is ", error.stack);
+          console.log("error.message is ", error.message);
+        }
       }
     }
+    logger.error(
+      `In generateFileAnalysis exhausted all models with keyIndex ${keyIndex}`
+    );
   }
   throw new Error("Could Not generate batch analysis, maybe ai model is down.");
 }
