@@ -41,7 +41,7 @@ export const repositoryWorker = new Worker(
         message: `Started processing repository: ${repo}`,
       });
 
-      console.log("About to be added in directoryQueue --groq ", {
+      console.log("About to be added in directoryQueue ", {
         owner,
         repo,
         repositoryId,

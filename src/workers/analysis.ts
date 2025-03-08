@@ -74,12 +74,14 @@ export const analysisWorker = new Worker(
 
     try {
       const analysis = await generateFileAnalysis(repositoryId, file);
+
+      console.log("analysis is ", analysis);
       prisma.file.update({
         where: {
           id: file.id,
         },
         data: {
-          analysis: analysis.analysis,
+          analysis,
         },
       });
 
@@ -119,3 +121,23 @@ export const analysisWorker = new Worker(
     concurrency: 5,
   }
 );
+
+analysisWorker.on("failed", (job, error) => {
+  const { file } = job?.data;
+  logger.error(`Analysis Worker at  ${file.path} processing failed.`);
+});
+
+analysisWorker.on("completed", async (job) => {
+  const { file } = job.data;
+  logger.success(`Analysis Worker at  ${file.path} processing completed.`);
+});
+
+// Gracefully shutdown Prisma when worker exits
+const shutdown = async () => {
+  console.log("Shutting down worker gracefully...");
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

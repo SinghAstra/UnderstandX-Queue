@@ -148,3 +148,21 @@ export const summaryWorker = new Worker(
     concurrency: 5,
   }
 );
+
+summaryWorker.on("failed", () => {
+  logger.error(`Summary Worker failed.`);
+});
+
+summaryWorker.on("completed", async () => {
+  logger.success(`Summary Worker processing completed.`);
+});
+
+// Gracefully shutdown Prisma when worker exits
+const shutdown = async () => {
+  console.log("Shutting down worker gracefully...");
+  await prisma.$disconnect();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

@@ -388,7 +388,38 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         file.content ||
         "No content available—analyze based on path and repo context."
       }
-      `}"`;
+      `}
+      
+      ## 📝 Example Response (for reference):
+      Below is a snippet of how the analysis might look for a simple file:
+
+      ---
+      ✨ # Understanding utils/sortArray.js
+
+      Hey there, coding newbie! Today, we’re diving into utils/sortArray.js, a handy little file in our repo that helps organize messy lists of numbers or words. Think of it like a librarian sorting books alphabetically—it makes everything neat and tidy! This file is part of a bigger project (check out the repo overview), and it’s often used by main.js to prep data before displaying it.
+
+      🌟 ### What It Does
+      This file exports a function called sortArray that takes an array (like [3, 1, 4, 1]) and returns it sorted ([1, 1, 3, 4]). It’s super useful whenever we need order—like ranking scores or listing names.
+
+      🧠 ### The Theory: Sorting Algorithms
+      Sorting is a classic problem in programming. Here, we’re using JavaScript’s built-in sort() method, which under the hood uses a fast algorithm (often QuickSort or similar). Why does this matter? It saves us time compared to writing our own sorting logic from scratch!
+
+      🔍 ### Breaking Down the Code
+      - **Variable: arr**  
+        This is the input array you pass in. It could be numbers, strings—whatever you want sorted!
+      - **Function: sortArray(arr)**  
+        This takes arr, calls arr.sort(), and returns the result. Simple, right? The sort() method rearranges arr in place, so we don’t need extra memory.
+
+      ⚙️ ### Why This Approach?
+      Using sort() is quick and reliable, but it has a trade-off: it modifies the original array. If we wanted to keep the original, we’d need to clone it first with [...arr]. For now, this works since main.js doesn’t care about the original order.
+
+      💡 ### Tips for Newbies
+      Try playing with sort() in your browser console! Type [5, 2, 9].sort() and see what happens. Want a challenge? Research how to sort numbers correctly with a comparison function like arr.sort((a, b) => a - b).
+
+      ---
+
+      This is just a taste—your analysis should expand on this style!
+      "`;
 
       const tokenCount = await estimateTokenCount(prompt);
       await handleRateLimit(tokenCount);
@@ -400,11 +431,12 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         },
       });
 
-      const analysis: Analysis = JSON.parse(result.response.text());
+      const analysis = JSON.parse(result.response.text());
 
       console.log("path --generateFileAnalysis is ", file.path);
+      console.log("typeof analysis is ", typeof analysis);
 
-      console.log("analysis is ", analysis);
+      // console.log("analysis is ", analysis);
 
       return analysis;
     } catch (error) {
