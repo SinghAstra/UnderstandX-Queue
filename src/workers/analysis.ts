@@ -75,8 +75,8 @@ export const analysisWorker = new Worker(
     try {
       const analysis = await generateFileAnalysis(repositoryId, file);
 
-      console.log("analysis is ", analysis);
-      prisma.file.update({
+      // console.log("analysis --analysisWorker is ", analysis);
+      const updatedFileAnalysis = await prisma.file.update({
         where: {
           id: file.id,
         },
@@ -84,6 +84,8 @@ export const analysisWorker = new Worker(
           analysis,
         },
       });
+
+      console.log("updatedFileAnalysis: ", updatedFileAnalysis);
 
       await sendProcessingUpdate(repositoryId, {
         id: uuid(),

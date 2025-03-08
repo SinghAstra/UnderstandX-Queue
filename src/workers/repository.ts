@@ -1,6 +1,6 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import { parseGithubUrl } from "../lib/github.js";
 import logger from "../lib/logger.js";
@@ -35,7 +35,7 @@ export const repositoryWorker = new Worker(
 
       // Send update to frontend that processing has started
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Started processing repository: ${repo}`,
@@ -89,7 +89,7 @@ export const repositoryWorker = new Worker(
 
       // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
-        id: uuidv4(),
+        id: uuid(),
         timestamp: new Date(),
         status: RepositoryStatus.FAILED,
         message: `Failed to process repository.`,
