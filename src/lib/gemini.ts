@@ -11,14 +11,6 @@ const REQUEST_LIMIT = 15;
 const TOKEN_LIMIT = 800000;
 const RATE_LIMIT_KEY = "global:rate_limit";
 
-const MODEL_FALLBACKS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-];
-const MAX_RETRIES = MODEL_FALLBACKS.length;
-
 type Summary = {
   path: string;
   summary: string;
@@ -35,14 +27,16 @@ type ParsedSummary = {
   summary: string;
 };
 
-if (!process.env.GEMINI_API_KEYS) {
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const modelName = "gemini-2.0-flash";
+
+if (!geminiApiKey) {
   throw new Error("Missing GEMINI_API_KEY environment variable.");
 }
-
-const keys = process.env.GEMINI_API_KEYS.split(",");
-function createGenAIClient(apiKey: string) {
-  return new GoogleGenerativeAI(apiKey);
-}
+const gemini = new GoogleGenerativeAI(geminiApiKey);
+const model = gemini.getGenerativeModel({
+  model: modelName,
+});
 
 export async function trackRequest(tokenCount: number) {
   const now = Date.now();
@@ -58,12 +52,14 @@ export async function trackRequest(tokenCount: number) {
     .exec();
 
   if (!result) {
-    throw new Error("Redis transaction failed");
+    throw new Error(
+      "Redis connection failed during updating tokens consumed and request count"
+    );
   }
 
-  const [requests, tokens] = result.map(([err, res]) => {
-    if (err) throw err;
-    return res;
+  const [requests, tokens] = result.map(([error, response]) => {
+    if (error) throw error;
+    return response;
   });
 
   return { requests, tokens };
@@ -91,7 +87,7 @@ async function waitForNextMinute() {
   const now = Date.now();
   const millisecondsUntilNextMinute = 60000 - (now % 60000);
   console.log(
-    `Rate limit exceeded. Waiting for ${millisecondsUntilNextMinute}ms...`
+    `Rate limit exceeded. Waiting for ${millisecondsUntilNextMinute} ms...`
   );
   await new Promise((resolve) =>
     setTimeout(resolve, millisecondsUntilNextMinute)
@@ -102,33 +98,16 @@ export async function estimateTokenCount(
   prompt: string,
   maxOutputTokens = 1000
 ) {
-  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
-    const apiKey = keys[keyIndex];
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const modelName = MODEL_FALLBACKS[attempt];
-      const model = createGenAIClient(apiKey).getGenerativeModel({
-        model: modelName,
-      });
-      try {
-        const inputTokenCount = await model.countTokens(prompt);
-        return inputTokenCount.totalTokens + maxOutputTokens;
-      } catch (error) {
-        // rough estimate
-        console.log(
-          `Attempt ${attempt + 1} with ${modelName} failed: ${
-            error instanceof Error && error.message
-          }`
-        );
-
-        if (error instanceof Error) {
-          console.log("error.stack is ", error.stack);
-          console.log("error.message is ", error.message);
-        }
-      }
+  try {
+    const inputTokenCount = await model.countTokens(prompt);
+    console.log("inputTokenCount: ", inputTokenCount);
+    return inputTokenCount.totalTokens + maxOutputTokens;
+  } catch (error) {
+    console.log("Could not estimate token Count");
+    if (error instanceof Error) {
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
     }
-    logger.error(
-      `In estimateTokenCount exhausted all models with keyIndex ${keyIndex}`
-    );
   }
   throw new Error("Could Not estimate token, maybe ai model is down.");
 }
@@ -152,18 +131,19 @@ export async function handleRateLimit(tokenCount: number) {
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
-  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
-    const apiKey = keys[keyIndex];
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const modelName = MODEL_FALLBACKS[attempt];
-      const model = createGenAIClient(apiKey).getGenerativeModel({
-        model: modelName,
-      });
-      try {
-        const filePaths = new Set(files.map((file) => file.path));
+  for (let i = 0; i < 5; i++) {
+    try {
+      const filePaths = new Set(files.map((file) => file.path));
 
-        const prompt = `
-      You are a code assistant. Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties. Example response:
+      const prompt = `
+      You are a code assistant.
+      Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. 
+
+      Return your response as a JSON array of objects, ensuring:
+      - Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties.
+      - All keys and values are strings — the entire JSON must be valid for direct parsing with JSON.parse().
+
+      Example response:
       [
         {"path": "src/file1.js", "summary": "This file contains utility functions for string manipulation."},
         {"path": "src/file2.py", "summary": "This script processes CSV data and generates a report."}
@@ -181,75 +161,73 @@ export async function generateBatchSummaries(
         .join("\n")}
     `;
 
-        const tokenCount = await estimateTokenCount(prompt);
+      const tokenCount = await estimateTokenCount(prompt);
 
-        await handleRateLimit(tokenCount);
+      await handleRateLimit(tokenCount);
 
-        const result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-          },
-        });
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      });
 
-        const summaries: Summary[] = JSON.parse(result.response.text());
+      let rawResponse = result.response.text();
+      console.log("rawResponse --generateBatchSummaries : ", rawResponse);
 
-        console.log("summaries is ", summaries);
+      rawResponse = rawResponse
+        .replace(/```json/g, "") // Remove ```json
+        .replace(/```/g, "") // Remove ```
+        .trim();
 
-        // First Perform the Check that are the summaries created properly
-        // Summaries should be an array of object with two properties path and summary
-        // Check if the path is present in the files array and if the summary is not empty
-        // If any of the checks fails, throw an error with the problematic file path
-        const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
-          if (
-            typeof summary !== "object" ||
-            typeof summary.path !== "string" ||
-            typeof summary.summary !== "string" ||
-            !filePaths.has(summary.path) ||
-            summary.summary.trim() === ""
-          ) {
-            throw new Error(
-              `Invalid summary format or unexpected file path: ${JSON.stringify(
-                summary
-              )}`
-            );
-          }
+      const parsedResponse = JSON.parse(rawResponse);
+      console.log("parsedResponse --generateBatchSummaries : ", parsedResponse);
 
-          const file = files.find((f) => f.path === summary.path);
-          if (!file) {
-            throw new Error(
-              `File path not found in the provided files array: ${summary.path}`
-            );
-          }
+      if (!isValidBatchSummaryResponse(parsedResponse, filePaths)) {
+        throw new Error("Invalid batch summary response format");
+      }
 
-          return {
-            id: file.id,
-            path: summary.path,
-            summary: summary.summary,
-          };
-        });
-
-        return parsedSummaries;
-      } catch (error) {
-        console.log(
-          `Attempt ${attempt + 1} with ${modelName} failed: ${
-            error instanceof Error && error.message
-          }`
-        );
-
-        if (error instanceof Error) {
-          console.log("error.stack is ", error.stack);
-          console.log("error.message is ", error.message);
+      const summaries: Summary[] = parsedResponse;
+      const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
+        const file = files.find((f) => f.path === summary.path);
+        if (!file) {
+          throw new Error(
+            `File path not found in the provided files array: ${summary.path}`
+          );
         }
+
+        return {
+          id: file.id,
+          path: summary.path,
+          summary: summary.summary,
+        };
+      });
+
+      return parsedSummaries;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
+      }
+
+      if (
+        error instanceof Error &&
+        (error.message.includes("Invalid batch summary response format") ||
+          error.message.includes(
+            "Expected double-quoted property name in JSON"
+          ))
+      ) {
+        console.log("--------------------------------");
+        console.log(`Syntax Error occurred. Trying again for ${i} time`);
+        console.log("--------------------------------");
+        continue;
+      } else {
+        throw new Error(
+          "Could Not generate batch summaries, maybe ai model is down."
+        );
       }
     }
-    logger.error(
-      `In generateBatchSummaries exhausted all models with keyIndex ${keyIndex}`
-    );
   }
-  throw new Error(
-    "Could Not generate batch summaries, maybe ai model is down."
-  );
 }
 
 export async function getRepositoryOverview(repositoryId: string) {
@@ -417,7 +395,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       }
       Return the response as a JSON object matching this structure.
 
-      This is just a taste—your analysis should expand on this style!
+      This is just a sample example. Your analysis should expand on this style!
       "`;
 
         const tokenCount = await estimateTokenCount(prompt);
@@ -429,6 +407,10 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
             responseMimeType: "application/json",
           },
         });
+
+        console.log("----------------------------");
+        console.log("analysis before json parsing is ", result.response.text());
+        console.log("----------------------------");
 
         const analysis: Analysis = JSON.parse(result.response.text());
 
@@ -462,4 +444,26 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
     );
   }
   throw new Error("Could Not generate batch analysis, maybe ai model is down.");
+}
+
+function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  // Validate each item in the array
+  for (const item of data) {
+    // Ensure item is an object of type Summary and valid path and not null
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof item.path !== "string" ||
+      typeof item.summary !== "string" ||
+      !filePaths.has(item.path) ||
+      Object.keys(item).length === 2
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
