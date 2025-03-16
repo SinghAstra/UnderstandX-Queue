@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { File } from "@prisma/client";
 import dotenv from "dotenv";
-import logger from "./logger.js";
 import { prisma } from "./prisma.js";
 import redisConnection from "./redis.js";
 
@@ -104,9 +103,12 @@ export async function estimateTokenCount(
     return inputTokenCount.totalTokens + maxOutputTokens;
   } catch (error) {
     console.log("Could not estimate token Count");
+
     if (error instanceof Error) {
+      console.log("--------------------------------------");
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
+      console.log("--------------------------------------");
     }
   }
   throw new Error("Could Not estimate token, maybe ai model is down.");
@@ -206,16 +208,16 @@ export async function generateBatchSummaries(
       return parsedSummaries;
     } catch (error) {
       if (error instanceof Error) {
+        console.log("--------------------------------");
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
+        console.log("--------------------------------");
       }
 
       if (
         error instanceof Error &&
         (error.message.includes("Invalid batch summary response format") ||
-          error.message.includes(
-            "Expected double-quoted property name in JSON"
-          ))
+          error.stack?.includes("SyntaxError"))
       ) {
         console.log("--------------------------------");
         console.log(`Syntax Error occurred. Trying again for ${i} time`);
@@ -228,32 +230,28 @@ export async function generateBatchSummaries(
       }
     }
   }
+  throw new Error(
+    "Could Not generate batch summaries, maybe ai model is down."
+  );
 }
 
 export async function getRepositoryOverview(repositoryId: string) {
-  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
-    const apiKey = keys[keyIndex];
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const modelName = MODEL_FALLBACKS[attempt];
-      const model = createGenAIClient(apiKey).getGenerativeModel({
-        model: modelName,
-      });
-      try {
-        // Fetch all file paths and summaries
-        const files = await prisma.file.findMany({
-          where: { repositoryId },
-          select: { path: true, shortSummary: true },
-        });
+  try {
+    // Fetch all file paths and summaries
+    const files = await prisma.file.findMany({
+      where: { repositoryId },
+      select: { path: true, shortSummary: true },
+    });
 
-        // Format file summaries for the prompt
-        const fileSummaries = files
-          .map(
-            (file) =>
-              `- ${file.path}: ${file.shortSummary || "No summary available"}`
-          )
-          .join("\n");
+    // Format file summaries for the prompt
+    const fileSummaries = files
+      .map(
+        (file) =>
+          `- ${file.path}: ${file.shortSummary || "No summary available"}`
+      )
+      .join("\n");
 
-        const prompt = `
+    const prompt = `
       You are a coding assistant. Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
       ## 📦 Project Overview Structure:
@@ -281,71 +279,56 @@ export async function getRepositoryOverview(repositoryId: string) {
       Please generate the MDX project overview as plain text.
       `;
 
-        const tokenCount = await estimateTokenCount(prompt);
+    const tokenCount = await estimateTokenCount(prompt);
 
-        await handleRateLimit(tokenCount);
+    await handleRateLimit(tokenCount);
 
-        const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt);
 
-        const repositoryOverview = result.response.text();
+    const repositoryOverview = result.response.text();
 
-        console.log("repositoryOverview is ", repositoryOverview);
+    console.log("repositoryOverview is ", repositoryOverview);
 
-        return repositoryOverview;
-      } catch (error) {
-        console.log(
-          `Attempt ${attempt + 1} with ${modelName} failed: ${
-            error instanceof Error && error.message
-          }`
-        );
-
-        if (error instanceof Error) {
-          console.log("error.stack is ", error.stack);
-          console.log("error.message is ", error.message);
-        }
-      }
+    return repositoryOverview;
+  } catch (error) {
+    if (error instanceof Error) {
+      console.log("--------------------------------");
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
+      console.log("--------------------------------");
     }
-    logger.error(
-      `In getRepositoryOverview exhausted all models with keyIndex ${keyIndex}`
+    throw new Error(
+      "Could Not generate Repository overview, maybe ai model is down."
     );
   }
-  throw new Error(
-    "Could Not generate Repository overview, maybe ai model is down."
-  );
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
-    const apiKey = keys[keyIndex];
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const modelName = MODEL_FALLBACKS[attempt];
-      const model = createGenAIClient(apiKey).getGenerativeModel({
-        model: modelName,
+  for (let i = 0; i < 5; i++) {
+    try {
+      const repository = await prisma.repository.findFirst({
+        where: {
+          id: repositoryId,
+        },
       });
-      try {
-        const repository = await prisma.repository.findFirst({
-          where: {
-            id: repositoryId,
-          },
-        });
 
-        if (!repository) {
-          throw new Error(`Repository not found with id: ${repositoryId}`);
-        }
+      if (!repository) {
+        throw new Error(`Repository not found with id: ${repositoryId}`);
+      }
 
-        const files = await prisma.file.findMany({
-          where: { repositoryId },
-          select: { path: true, shortSummary: true },
-        });
+      const files = await prisma.file.findMany({
+        where: { repositoryId },
+        select: { path: true, shortSummary: true },
+      });
 
-        const fileSummaries = files
-          .map(
-            (file) =>
-              `- ${file.path}: ${file.shortSummary || "No summary available"}`
-          )
-          .join("\n");
+      const fileSummaries = files
+        .map(
+          (file) =>
+            `- ${file.path}: ${file.shortSummary || "No summary available"}`
+        )
+        .join("\n");
 
-        const prompt = `
+      const prompt = `
       "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. Your explanation should include:
       - A beginner-friendly overview of what the file does in the repo.
       - Any underlying theory (e.g., OOP, algorithms like sorting, or data structures like arrays) and why it matters here.
@@ -371,6 +354,8 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       Analyze the file below and return a JSON object with two properties:
         - **path**: The file’s path (e.g., "src/utils.js").
         - **analysis**: A 300–700 word MDX-formatted explanation (adjust based on complexity).
+        - All keys and values must be strings — the entire JSON object must be valid for direct parsing with JSON.parse().
+        
 
 
       ## 🚀 Formatting Guidelines:
@@ -395,55 +380,77 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       }
       Return the response as a JSON object matching this structure.
 
-      This is just a sample example. Your analysis should expand on this style!
+      This is just a sample example response. Your analysis should expand on this style!
       "`;
 
-        const tokenCount = await estimateTokenCount(prompt);
-        await handleRateLimit(tokenCount);
+      const tokenCount = await estimateTokenCount(prompt);
+      await handleRateLimit(tokenCount);
 
-        const result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-          },
-        });
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      });
 
-        console.log("----------------------------");
-        console.log("analysis before json parsing is ", result.response.text());
-        console.log("----------------------------");
+      let rawResponse = result.response.text();
 
-        const analysis: Analysis = JSON.parse(result.response.text());
+      rawResponse = rawResponse
+        .replace(/```json/g, "") // Remove ```json
+        .replace(/```/g, "") // Remove ```
+        .trim();
 
-        if (analysis.path !== file.path) {
-          throw new Error(
-            `Path in analysis does not match file path. Analysis path: ${analysis.path}, file path: ${file.path}`
-          );
-        }
+      const parsedResponse = JSON.parse(rawResponse);
 
-        console.log("path --generateFileAnalysis is ", file.path);
-        console.log("typeof analysis is ", typeof analysis);
+      if (!isValidFileAnalysis(parsedResponse, file.path)) {
+        throw new Error("Invalid file Analysis response format");
+      }
 
-        // console.log("analysis is ", analysis);
+      const analysis: Analysis = parsedResponse;
+      return analysis.analysis;
+    } catch (error) {
+      console.log("--------------------------------");
+      console.log("file.path is ", file.path);
+      if (error instanceof Error) {
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
+      }
+      console.log("--------------------------------");
 
-        return analysis.analysis;
-      } catch (error) {
-        console.log(
-          `Attempt ${attempt + 1} with ${modelName} failed: ${
-            error instanceof Error && error.message
-          }`
+      if (
+        error instanceof Error &&
+        (error.message.includes("Invalid file Analysis response format") ||
+          error.stack?.includes("SyntaxError"))
+      ) {
+        console.log("--------------------------------");
+        console.log(`Syntax Error occurred. Trying again for ${i} time`);
+        console.log("--------------------------------");
+        continue;
+      } else {
+        throw new Error(
+          "Could Not generate file analysis, maybe ai model is down."
         );
-
-        if (error instanceof Error) {
-          console.log("error.stack is ", error.stack);
-          console.log("error.message is ", error.message);
-        }
       }
     }
-    logger.error(
-      `In generateFileAnalysis exhausted all models with keyIndex ${keyIndex}`
-    );
   }
+
   throw new Error("Could Not generate batch analysis, maybe ai model is down.");
+}
+
+function isValidFileAnalysis(data: any, filePath: string) {
+  // Ensure item is an object of type Summary and valid path and not null
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof data.path !== "string" ||
+    typeof data.analysis !== "string" ||
+    data.path !== filePath ||
+    Object.keys(data).length !== 2
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
@@ -459,7 +466,7 @@ function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
       typeof item.path !== "string" ||
       typeof item.summary !== "string" ||
       !filePaths.has(item.path) ||
-      Object.keys(item).length === 2
+      Object.keys(item).length !== 2
     ) {
       return false;
     }

@@ -27,7 +27,12 @@ router.get("/jobs", async (_req: Request, res: Response) => {
       await redisConnection.del(...keys);
     }
 
-    const queueNames = [QUEUES.DIRECTORY, QUEUES.REPOSITORY];
+    const queueNames = [
+      QUEUES.DIRECTORY,
+      QUEUES.REPOSITORY,
+      QUEUES.ANALYSIS,
+      QUEUES.SUMMARY,
+    ];
 
     for (const queueName of queueNames) {
       const queue = new Queue(queueName, { connection: redisConnection });
