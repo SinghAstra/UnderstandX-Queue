@@ -4,7 +4,7 @@ import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import {
   generateBatchSummaries,
-  getRepositoryOverview,
+  generateRepositoryOverview,
 } from "../lib/gemini.js";
 import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
@@ -18,7 +18,7 @@ import {
 import redisConnection from "../lib/redis.js";
 import { analysisQueue } from "../queues/repository.js";
 
-async function generateRepositoryOverview(repositoryId: string) {
+async function generateRepoOverview(repositoryId: string) {
   const summaryWorkerTotalJobsKey =
     summaryWorkerTotalJobsRedisKey + repositoryId;
   const summaryWorkerCompletedJobsKey =
@@ -56,7 +56,7 @@ async function generateRepositoryOverview(repositoryId: string) {
       message: "Generated Summaries For all Files...",
     });
 
-    const repoOverview = await getRepositoryOverview(repositoryId);
+    const repoOverview = await generateRepositoryOverview(repositoryId);
     await prisma.repository.update({
       where: { id: repositoryId },
       data: { status: RepositoryStatus.PROCESSING, overview: repoOverview },
@@ -140,7 +140,7 @@ export const summaryWorker = new Worker(
         message: `Failed to generate short summary.`,
       });
     } finally {
-      await generateRepositoryOverview(repositoryId);
+      await generateRepoOverview(repositoryId);
     }
   },
   {

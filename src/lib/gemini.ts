@@ -15,11 +15,6 @@ type Summary = {
   summary: string;
 };
 
-type Analysis = {
-  path: string;
-  analysis: string;
-};
-
 type ParsedSummary = {
   id: string;
   path: string;
@@ -128,7 +123,6 @@ async function handleRequestExceeded() {
   const currentMinute = Math.floor(now / 60000);
   const key = `${RATE_LIMIT_KEY}:${currentMinute}:requests`;
   await redisConnection.set(key, 16);
-  console.log("Request Value has been updated");
   const limitsResponse = await checkLimits();
   console.log("limitsResponse:", limitsResponse);
   console.log("-------------------------------");
@@ -250,7 +244,7 @@ export async function generateBatchSummaries(
   );
 }
 
-export async function getRepositoryOverview(repositoryId: string) {
+export async function generateRepositoryOverview(repositoryId: string) {
   try {
     // Fetch all file paths and summaries
     const files = await prisma.file.findMany({
@@ -345,15 +339,29 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         .join("\n");
 
       const prompt = `
-      "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. 
-      I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. 
-      Your explanation should include:
-      - A beginner-friendly overview of what the file does in the repo.
-      - Any underlying theory (e.g., OOP, algorithms like sorting, or data structures like arrays) and why it matters here.
-      - Detailed explanations of all variables and functions—why they exist and how they work.
-      - The approach taken—why it’s coded this way, what problems it solves, and any trade-offs or alternatives worth considering.
-      - Tips or insights to help a newbie understand and apply these ideas.
+      "You are a coding assistant.
+      Your task is to generate a **structured MDX File Analysis** based on
+      the provided repository overview 
+      short summaries of all files in the repo, and 
+      file Content to analyze. 
 
+      📝 Introduction:  
+      - 🔍 **Context About the File:** Briefly describe the file’s role within the project.  
+      - 🎯 **Purpose:** Explain what this file does in the project.  
+      - 🔗 **Role in Execution:** Highlight how it connects to the application’s flow.  
+
+      📑 File Structure Breakdown:  
+      - 📦 **Imports/Dependencies:** List and explain the external libraries or modules used, and why they’re included.  
+      - 🏗️ **Key Sections:** Identify the major parts of the file, like variables, functions, or classes.  
+      - 🔄 **Flow:** Describe the sequence of operations or logic within the file, if relevant.  
+
+      📜 Step-by-Step Code Explanation:  
+      - 🔝 **Start at the Top:** Begin with the imports or the first significant line of code.  
+      - 🧠 **Focus on Logic:** Break down what each section does in simple, plain language.  
+      - 🚫 **Avoid Jargon Overload:** Briefly define any technical terms to keep it beginner-friendly.  
+
+      🔁 Quick Recap:  
+      - 📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.  
 
       Here’s the context:
       ## Repository Overview:
@@ -368,17 +376,12 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         "No summaries available—use file paths and content to infer roles."
       }
 
-      ##  Task
-      Analyze the file below and return a JSON object with two properties:
-        - **path**: The file’s path (e.g., "src/utils.js").
-        - **analysis**: A 300–700 word MDX-formatted explanation (adjust based on complexity).
-        - All keys and values must be strings — the entire JSON object must be valid for direct parsing with JSON.parse().
-
-
-
-      ## Formatting Guidelines:
-      - Use **MDX syntax** (e.g., # for headings, **bold**) without wrapping in code blocks.
-      - Focus on key code excerpts if content is long.
+      ## 🚀 Guidelines:
+      - **MDX format:** Use proper heading levels (#, ##, ###).
+      - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).
+      - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.
+      - **Emojis:** Add relevant emojis to make the overview engaging add emoji before the heading text.
+      - **No code block wrappers:** Do **not** use triple backticks for MDX content.
 
 
       ##  File to Analyze:
@@ -389,13 +392,11 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         "No content available—analyze based on path and repo context."
       }
       
-     ## 📝 Output Example
-      {
-        "path": "utils/sortArray.js",
-        "analysis": "Analysis of file in MDX Syntax. "
-      }
-      Return the response as a JSON object matching this structure.
+        ## 🎯 Important:
+      - Ensure the output is **valid MDX**.
+      - **Directly output MDX content** without wrapping it in code blocks.
 
+      Please generate the MDX file analysis as plain text.
       "`;
 
       const tokenCount = await estimateTokenCount(prompt);
@@ -415,14 +416,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         .replace(/```/g, "") // Remove ```
         .trim();
 
-      const parsedResponse = JSON.parse(rawResponse);
-
-      if (!isValidFileAnalysis(parsedResponse, file.path)) {
-        throw new Error("Invalid file Analysis response format");
-      }
-
-      const analysis: Analysis = parsedResponse;
-      return analysis.analysis;
+      return rawResponse;
     } catch (error) {
       console.log("--------------------------------");
       console.log("file.path is ", file.path);
@@ -485,22 +479,6 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
   }
 
   throw new Error("Could Not generate batch analysis, maybe ai model is down.");
-}
-
-function isValidFileAnalysis(data: any, filePath: string) {
-  // Ensure item is an object of type Summary and valid path and not null
-  if (
-    typeof data !== "object" ||
-    data === null ||
-    typeof data.path !== "string" ||
-    typeof data.analysis !== "string" ||
-    data.path !== filePath ||
-    Object.keys(data).length !== 2
-  ) {
-    return false;
-  }
-
-  return true;
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
