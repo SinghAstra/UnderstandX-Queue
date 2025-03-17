@@ -261,7 +261,8 @@ export async function generateRepositoryOverview(repositoryId: string) {
       .join("\n");
 
     const prompt = `
-      You are a coding assistant. Your task is to generate a **structured MDX project overview** based on the provided file summaries.
+      You are a coding assistant.
+      Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
       ## 📦 Project Overview Structure:
       1. **Introduction:** 🎯 Briefly explain the purpose of the project, its goals, and its main use cases.
@@ -314,7 +315,6 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
   for (let i = 0; i < 5; i++) {
-    let rawResponse;
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -340,30 +340,29 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       const prompt = `
       "You are a coding assistant.
-      Your task is to generate a **structured MDX File Analysis** based on
+      Your task is to generate a **structured MDX File Analysis Blog** based on
       the provided repository overview 
       short summaries of all files in the repo, and 
       file Content to analyze. 
 
+
       📝 Introduction:  
-      - 🔍 **Context About the File:** Briefly describe the file’s role within the project.  
-      - 🎯 **Purpose:** Explain what this file does in the project.  
-      - 🔗 **Role in Execution:** Highlight how it connects to the application’s flow.  
+      -   describe the file’s role within the project.  
+      -   Explain what this file does in the project.  
+      -   Highlight how it connects to the application’s flow.  
 
       📑 File Structure Breakdown:  
-      - 📦 **Imports/Dependencies:** List and explain the external libraries or modules used, and why they’re included.  
-      - 🏗️ **Key Sections:** Identify the major parts of the file, like variables, functions, or classes.  
-      - 🔄 **Flow:** Describe the sequence of operations or logic within the file, if relevant.  
+      -  List and explain the external libraries or modules used, and why they’re included.  
+      -  Identify the major parts of the file, like variables, functions, or classes.  
+      -  Describe the sequence of operations or logic within the file, if relevant.  
 
-      📜 Step-by-Step Code Explanation:  
-      - 🔝 **Start at the Top:** Begin with the imports or the first significant line of code.  
-      - 🧠 **Focus on Logic:** Break down what each section does in simple, plain language.  
-      - 🚫 **Avoid Jargon Overload:** Briefly define any technical terms to keep it beginner-friendly.  
+      📜 Code Explanation:  
+      -  Begin with the imports or the first significant line of code.  
+      -  Break down what each section does in simple, plain language.  
 
       🔁 Quick Recap:  
       - 📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.  
 
-      Here’s the context:
       ## Repository Overview:
       ${
         repository.overview ||
@@ -376,45 +375,48 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         "No summaries available—use file paths and content to infer roles."
       }
 
+      ##  File to Analyze:
+      ${
+        file.content ||
+        "No content available—analyze based on path and repo context."
+      }
+
       ## 🚀 Guidelines:
       - **MDX format:** Use proper heading levels (#, ##, ###).
       - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).
       - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.
       - **Emojis:** Add relevant emojis to make the overview engaging add emoji before the heading text.
       - **No code block wrappers:** Do **not** use triple backticks for MDX content.
+      -  Briefly define any technical terms to keep it beginner-friendly.  
 
-
-      ##  File to Analyze:
-      - path: ${file.path}
-      - content:
-      ${
-        file.content ||
-        "No content available—analyze based on path and repo context."
-      }
       
-        ## 🎯 Important:
-      - Ensure the output is **valid MDX**.
-      - **Directly output MDX content** without wrapping it in code blocks.
+      
+      ### 🎯 Important
+      Please generate the MDX file analysis and return it directly as plain text, without any JSON wrapping or additional formatting. The response should be valid MDX content, ready to use as-is.
 
-      Please generate the MDX file analysis as plain text.
       "`;
 
       const tokenCount = await estimateTokenCount(prompt);
       await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-        },
-      });
+      const result = await model.generateContent(prompt);
 
-      rawResponse = result.response.text();
+      const rawResponse = result.response.text();
+      console.log("-------------------------------");
+      console.log(
+        "Updated generateContent prompt args rawResponse",
+        rawResponse
+      );
+      console.log("typeof rawResponse", typeof rawResponse);
+      console.log("-------------------------------");
 
-      rawResponse = rawResponse
-        .replace(/```json/g, "") // Remove ```json
-        .replace(/```/g, "") // Remove ```
-        .trim();
+      if (typeof rawResponse !== "string") {
+        console.log("-------------------------------");
+        console.log("rawResponse is not a string", rawResponse);
+        console.log(`Trying again for ${i + 1} time`);
+        console.log("-------------------------------");
+        continue;
+      }
 
       return rawResponse;
     } catch (error) {
@@ -423,32 +425,6 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       if (error instanceof Error) {
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
-
-        if (
-          error.message.includes("Bad control character") ||
-          error.message.includes("Bad escaped character")
-        ) {
-          const res = error.message.match(/at position (\d+)/);
-          if (!res) {
-            console.log("res is undefined");
-            return;
-          }
-
-          const position = parseInt(res[1]);
-          if (!rawResponse) {
-            console.log("rawResponse is undefined");
-            return;
-          }
-          console.log(
-            `Character at position ${position}: ${rawResponse[position]}`
-          );
-          console.log(
-            `Context around position ${position}: ${rawResponse.slice(
-              position - 10,
-              position + 10
-            )}`
-          );
-        }
       }
       console.log("--------------------------------");
 
@@ -461,24 +437,13 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         continue;
       }
 
-      if (
-        error instanceof Error &&
-        (error.message.includes("Invalid file Analysis response format") ||
-          error.stack?.includes("SyntaxError"))
-      ) {
-        console.log("--------------------------------");
-        console.log(`Syntax Error occurred. Trying again for ${i} time`);
-        console.log("--------------------------------");
-        continue;
-      } else {
-        throw new Error(
-          "Could Not generate file analysis, maybe ai model is down."
-        );
-      }
+      throw new Error(
+        "Could Not generate file analysis, maybe ai model is down."
+      );
     }
   }
 
-  throw new Error("Could Not generate batch analysis, maybe ai model is down.");
+  throw new Error("Could Not generate file analysis, maybe ai model is down.");
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
