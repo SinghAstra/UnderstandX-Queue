@@ -82,15 +82,9 @@ export async function checkLimits() {
   };
 }
 
-async function waitForNextMinute() {
-  const now = Date.now();
-  const millisecondsUntilNextMinute = 60000 - (now % 60000);
-  console.log(
-    `Rate limit exceeded. Waiting for ${millisecondsUntilNextMinute} ms...`
-  );
-  await new Promise((resolve) =>
-    setTimeout(resolve, millisecondsUntilNextMinute)
-  );
+async function sleepForOneMinute() {
+  console.log(`Rate limit exceeded. Waiting for 1000ms...`);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
 export async function estimateTokenCount(
@@ -98,20 +92,17 @@ export async function estimateTokenCount(
   maxOutputTokens = 1000
 ) {
   try {
-    const inputTokenCount = await model.countTokens(prompt);
-    console.log("inputTokenCount: ", inputTokenCount);
-    return inputTokenCount.totalTokens + maxOutputTokens;
+    return Math.ceil(prompt.length / 4) + maxOutputTokens;
   } catch (error) {
     console.log("Could not estimate token Count");
-
     if (error instanceof Error) {
       console.log("--------------------------------------");
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
       console.log("--------------------------------------");
     }
+    throw new Error("Could not estimate token count.");
   }
-  throw new Error("Could Not estimate token, maybe ai model is down.");
 }
 
 export async function handleRateLimit(tokenCount: number) {
@@ -124,15 +115,29 @@ export async function handleRateLimit(tokenCount: number) {
   const { requestsExceeded, tokensExceeded } = limitsResponse;
 
   if (requestsExceeded || tokensExceeded) {
-    await waitForNextMinute();
+    await sleepForOneMinute();
   }
 
   await trackRequest(tokenCount);
 }
 
+async function handleRequestExceeded() {
+  console.log("-------------------------------");
+  console.log("In handleRequest exceeded");
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  const key = `${RATE_LIMIT_KEY}:${currentMinute}:requests`;
+  await redisConnection.set(key, 16);
+  console.log("Request Value has been updated");
+  const limitsResponse = await checkLimits();
+  console.log("limitsResponse:", limitsResponse);
+  console.log("-------------------------------");
+}
+
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
+  let rawResponse;
   for (let i = 0; i < 5; i++) {
     try {
       const filePaths = new Set(files.map((file) => file.path));
@@ -174,7 +179,7 @@ export async function generateBatchSummaries(
         },
       });
 
-      let rawResponse = result.response.text();
+      rawResponse = result.response.text();
       console.log("rawResponse --generateBatchSummaries : ", rawResponse);
 
       rawResponse = rawResponse
@@ -209,9 +214,19 @@ export async function generateBatchSummaries(
     } catch (error) {
       if (error instanceof Error) {
         console.log("--------------------------------");
+        console.log("rawResponse is ", rawResponse);
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
         console.log("--------------------------------");
+      }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
+      ) {
+        await handleRequestExceeded();
+        sleepForOneMinute();
+        continue;
       }
 
       if (
@@ -305,6 +320,7 @@ export async function getRepositoryOverview(repositoryId: string) {
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
   for (let i = 0; i < 5; i++) {
+    let rawResponse;
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -329,7 +345,9 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         .join("\n");
 
       const prompt = `
-      "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. Your explanation should include:
+      "I’m giving you a repo overview, short summaries of all files in the repo, and an file Content to analyze. 
+      I want you to explain file like you’re writing a blog post for a curious beginner who’s excited to learn programming. 
+      Your explanation should include:
       - A beginner-friendly overview of what the file does in the repo.
       - Any underlying theory (e.g., OOP, algorithms like sorting, or data structures like arrays) and why it matters here.
       - Detailed explanations of all variables and functions—why they exist and how they work.
@@ -338,34 +356,32 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
 
       Here’s the context:
-      ## 📦 Repository Overview:
+      ## Repository Overview:
       ${
         repository.overview ||
         "No overview provided—make reasonable guesses based on file paths and content."
       }
 
-      ## 📚 File Summaries:
+      ## File Summaries:
       ${
         fileSummaries ||
         "No summaries available—use file paths and content to infer roles."
       }
 
-      ## 🎯 Task
+      ##  Task
       Analyze the file below and return a JSON object with two properties:
         - **path**: The file’s path (e.g., "src/utils.js").
         - **analysis**: A 300–700 word MDX-formatted explanation (adjust based on complexity).
         - All keys and values must be strings — the entire JSON object must be valid for direct parsing with JSON.parse().
-        
 
 
-      ## 🚀 Formatting Guidelines:
+
+      ## Formatting Guidelines:
       - Use **MDX syntax** (e.g., # for headings, **bold**) without wrapping in code blocks.
-      - Add **emojis** for fun vibe
       - Focus on key code excerpts if content is long.
-      - Link to related files in the repo (e.g., imports) where relevant.
 
 
-      ## 🗂️ File to Analyze:
+      ##  File to Analyze:
       - path: ${file.path}
       - content:
       ${
@@ -376,11 +392,10 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
      ## 📝 Output Example
       {
         "path": "utils/sortArray.js",
-        "analysis": "#  Understanding utils/sortArray.js\n\nHey newbie! This file sorts arrays like [3, 1, 4] into [1, 3, 4]. It’s a helper for main.js!\n\n ### What It Does\nSorts an array fast...\n\n ### Theory\nUses JavaScript’s sort()—a QuickSort vibe...\n\n ### Code Breakdown\n- **arr**: The array to sort...\n\n ### Approach\nSimple but modifies the original..."
+        "analysis": "Analysis of file in MDX Syntax. "
       }
       Return the response as a JSON object matching this structure.
 
-      This is just a sample example response. Your analysis should expand on this style!
       "`;
 
       const tokenCount = await estimateTokenCount(prompt);
@@ -393,7 +408,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         },
       });
 
-      let rawResponse = result.response.text();
+      rawResponse = result.response.text();
 
       rawResponse = rawResponse
         .replace(/```json/g, "") // Remove ```json
@@ -414,8 +429,43 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       if (error instanceof Error) {
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
+
+        if (
+          error.message.includes("Bad control character") ||
+          error.message.includes("Bad escaped character")
+        ) {
+          const res = error.message.match(/at position (\d+)/);
+          if (!res) {
+            console.log("res is undefined");
+            return;
+          }
+
+          const position = parseInt(res[1]);
+          if (!rawResponse) {
+            console.log("rawResponse is undefined");
+            return;
+          }
+          console.log(
+            `Character at position ${position}: ${rawResponse[position]}`
+          );
+          console.log(
+            `Context around position ${position}: ${rawResponse.slice(
+              position - 10,
+              position + 10
+            )}`
+          );
+        }
       }
       console.log("--------------------------------");
+
+      if (
+        error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
+      ) {
+        await handleRequestExceeded();
+        sleepForOneMinute();
+        continue;
+      }
 
       if (
         error instanceof Error &&
