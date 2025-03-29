@@ -5,8 +5,8 @@ import { parseGithubUrl } from "../lib/github.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
-  directoryWorkerCompletedJobsRedisKey,
-  directoryWorkerTotalJobsRedisKey,
+  getDirectoryWorkerCompletedJobsRedisKey,
+  getDirectoryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
@@ -16,6 +16,11 @@ export const repositoryWorker = new Worker(
   async (job) => {
     console.log("Starting repository worker...");
     const { repositoryId, githubUrl } = job.data;
+
+    const directoryWorkerTotalJobsRedisKey =
+      getDirectoryWorkerTotalJobsRedisKey(repositoryId);
+    const directoryWorkerCompletedJobsRedisKey =
+      getDirectoryWorkerCompletedJobsRedisKey(repositoryId);
 
     try {
       const { owner, repo, isValid } = parseGithubUrl(githubUrl);
@@ -31,10 +36,9 @@ export const repositoryWorker = new Worker(
         },
       });
 
-      // TODO: Humanize the message
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `Started processing repository: ${repo}`,
+        message: `🔍 Analyzing repository: ${repo}... Getting things ready for you!`,
       });
 
       console.log("About to be added in directoryQueue ", {
@@ -44,14 +48,8 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      await redisClient.set(
-        directoryWorkerTotalJobsRedisKey + repositoryId,
-        "1"
-      );
-      await redisClient.set(
-        directoryWorkerCompletedJobsRedisKey + repositoryId,
-        "0"
-      );
+      await redisClient.set(directoryWorkerTotalJobsRedisKey, 1);
+      await redisClient.set(directoryWorkerCompletedJobsRedisKey, 0);
 
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,
@@ -67,15 +65,9 @@ export const repositoryWorker = new Worker(
         console.log("error.message is ", error.message);
       }
 
-      await redisClient.del(directoryWorkerTotalJobsRedisKey + repositoryId);
-      await redisClient.del(
-        directoryWorkerCompletedJobsRedisKey + repositoryId
-      );
-
-      // TODO : Humanize this message
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `Failed to process repository.`,
+        message: "Oops! Something went wrong. Please try again later. ⚠️",
       });
 
       // Update status to failed
@@ -83,8 +75,6 @@ export const repositoryWorker = new Worker(
         where: { id: repositoryId },
         data: { status: RepositoryStatus.FAILED },
       });
-
-      throw error;
     }
   },
   {

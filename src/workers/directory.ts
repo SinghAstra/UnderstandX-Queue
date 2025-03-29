@@ -1,6 +1,5 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuid } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import {
   CONCURRENT_PROCESSING,
@@ -9,37 +8,31 @@ import {
   QUEUES,
 } from "../lib/constants.js";
 import { fetchGithubContent } from "../lib/github.js";
-import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
-  directoryWorkerCompletedJobsRedisKey,
-  directoryWorkerTotalJobsRedisKey,
-  summaryWorkerCompletedJobsRedisKey,
-  summaryWorkerTotalJobsRedisKey,
+  getDirectoryWorkerCompletedJobsRedisKey,
+  getDirectoryWorkerTotalJobsRedisKey,
+  getSummaryWorkerCompletedJobsRedisKey,
 } from "../lib/redis-keys.js";
-import { default as redisConnection } from "../lib/redis.js";
+import redisClient from "../lib/redis.js";
 import { directoryQueue, summaryQueue } from "../queues/repository.js";
 
 let dirPath: string;
 
 async function startSummaryWorker(repositoryId: string) {
   const directoryWorkerTotalJobsKey =
-    directoryWorkerTotalJobsRedisKey + repositoryId;
-
+    getDirectoryWorkerTotalJobsRedisKey(repositoryId);
   const directoryWorkerCompletedJobsKey =
-    directoryWorkerCompletedJobsRedisKey + repositoryId;
+    getDirectoryWorkerCompletedJobsRedisKey(repositoryId);
 
   const summaryWorkerTotalJobsKey =
-    summaryWorkerTotalJobsRedisKey + repositoryId;
+    getSummaryWorkerCompletedJobsRedisKey(repositoryId);
 
-  const summaryWorkerCompletedJobsKey =
-    summaryWorkerCompletedJobsRedisKey + repositoryId;
-
-  const directoryWorkerCompletedJobs = await redisConnection.get(
+  const directoryWorkerCompletedJobs = await redisClient.get(
     directoryWorkerCompletedJobsKey
   );
-  const directoryWorkerTotalJobs = await redisConnection.get(
+  const directoryWorkerTotalJobs = await redisClient.get(
     directoryWorkerTotalJobsKey
   );
 
@@ -50,19 +43,17 @@ async function startSummaryWorker(repositoryId: string) {
   console.log("-------------------------------------------------------");
 
   if (directoryWorkerCompletedJobs === directoryWorkerTotalJobs) {
-    logger.info("-------------------------------------------------------");
-    logger.info(
+    console.log("-------------------------------------------------------");
+    console.log(
       "Inside the if of directoryWorkerCompletedJobs === directoryWorkerTotalJobs"
     );
-    logger.info(`dirPath is ${dirPath}`);
-    logger.info("-------------------------------------------------------");
+    console.log(`dirPath is ${dirPath}`);
+    console.log("-------------------------------------------------------");
 
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
-      message: "Starting to generate file summaries...",
+      message: "🔍 Now analyzing your files to create summaries...",
     });
 
     // Fetch the Files of the repository that do not have short summary
@@ -76,8 +67,7 @@ async function startSummaryWorker(repositoryId: string) {
       filesWithoutSummary.length / batchSizeForShortSummary
     );
 
-    redisConnection.set(summaryWorkerTotalJobsKey, totalBatchesForShortSummary);
-    redisConnection.set(summaryWorkerCompletedJobsKey, 0);
+    redisClient.set(summaryWorkerTotalJobsKey, totalBatchesForShortSummary);
 
     for (
       let i = 0;
@@ -94,9 +84,6 @@ async function startSummaryWorker(repositoryId: string) {
         files: fileWithoutSummaryBatch,
       });
     }
-
-    await redisConnection.del(directoryWorkerCompletedJobsKey);
-    await redisConnection.del(directoryWorkerTotalJobsKey);
   }
 }
 
@@ -106,29 +93,27 @@ export const directoryWorker = new Worker(
     const { owner, repo, repositoryId, path } = job.data;
     dirPath = path;
     const directoryWorkerTotalJobsKey =
-      directoryWorkerTotalJobsRedisKey + repositoryId;
-
+      getDirectoryWorkerTotalJobsRedisKey(repositoryId);
     const directoryWorkerCompletedJobsKey =
-      directoryWorkerCompletedJobsRedisKey + repositoryId;
+      getDirectoryWorkerCompletedJobsRedisKey(repositoryId);
+    const dirName = path ? path.split("/").pop() : "root";
 
     try {
       // Fetch only the current directory level (do NOT recurse)
       const items = await fetchGithubContent(owner, repo, path, repositoryId);
 
-      // Notify frontend that this directory is being processed
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
-        message: `Processing directory: ${path || "root"}`,
+        message: `📂 Exploring the ${dirName} directory...`,
       });
 
       const directories = items.filter((item) => item.type === "dir");
       const files = items.filter((item) => item.type === "file");
 
       // Update the directory Worker Total Jobs
-      redisConnection.incrby(directoryWorkerTotalJobsKey, directories.length);
+      redisClient.incrby(directoryWorkerTotalJobsKey, directories.length);
 
+      // Check if Parent Directory exists
       const directory = await prisma.directory.findFirst({
         where: {
           repositoryId,
@@ -137,7 +122,6 @@ export const directoryWorker = new Worker(
       });
       const parentDirId = directory?.id || null;
 
-      // Save directories in parallel
       const directoryData = directories.map((dir) => {
         return prisma.directory.create({
           data: {
@@ -156,37 +140,28 @@ export const directoryWorker = new Worker(
       // Queue subdirectories for processing
       await Promise.all(
         directories.map(async (dir) => {
-          try {
-            await directoryQueue.add("process-directory", {
-              owner,
-              repo,
-              repositoryId,
-              path: dir.path,
-            });
-          } catch (error) {
-            // If queuing fails, we need to adjust the pending counter
-            throw error;
-          }
+          await directoryQueue.add("process-directory", {
+            owner,
+            repo,
+            repositoryId,
+            path: dir.path,
+          });
         })
       );
 
       // Notify user that this directory is fully processed
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
-        message: `Finished processing directory: ${path || "root"}`,
+        message: `✅ Finished scanning the ${dirName} directory`,
       });
 
-      await redisConnection.incr(directoryWorkerCompletedJobsKey);
+      await redisClient.incr(directoryWorkerCompletedJobsKey);
 
       return { status: "SUCCESS", processed: items.length };
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Directory worker error: ${error.message}`);
-        logger.error(`Stack: ${error.stack}`);
-      } else {
-        logger.error(`Unknown directory worker error: ${error}`);
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
       }
 
       await prisma.repository.update({
@@ -194,12 +169,9 @@ export const directoryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.FAILED,
-        message: `Failed to process directory: ${path || "root"}`,
+        message: `❌ Oops! We couldn't process the ${dirName} directory. Please try again later.`,
       });
     } finally {
       // Check if processing is complete
@@ -207,7 +179,7 @@ export const directoryWorker = new Worker(
     }
   },
   {
-    connection: redisConnection,
+    connection: redisClient,
     concurrency: CONCURRENT_PROCESSING,
   }
 );
@@ -218,14 +190,16 @@ async function processFilesInBatches(
   currentPath: string,
   directoryId: string | null
 ) {
+  let dirName = currentPath.split("/").pop();
+  dirName = dirName ? dirName : "root";
   try {
+    const fileCount = files.length;
+
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
-      message: `Processing ${files.length} files in batches for ${
-        currentPath || "root"
-      }`,
+      message: `📄 Processing ${fileCount} ${
+        fileCount === 1 ? "file" : "files"
+      } in ${dirName}...`,
     });
 
     const fileBatches = [];
@@ -256,41 +230,33 @@ async function processFilesInBatches(
         )
       );
 
-      logger.info(`createdFiles.length is ${createdFiles.length}`);
+      console.log("Files saved in database", createdFiles.length);
+
+      const currentBatch = i + 1;
+      const totalBatches = fileBatches.length;
+      const progress = Math.round((currentBatch / totalBatches) * 100);
 
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
-        message: `Saved batch ${i + 1}/${fileBatches.length} (${
-          batch.length
-        } files) for ${currentPath || "root"}`,
+        message: `⏳ Saving files in ${dirName}: ${progress}% complete`,
       });
     }
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
-      message: `Finished processing ${files.length} files in ${
-        currentPath || "root"
-      }.`,
+      message: `🎉 Successfully processed all ${files.length} ${
+        files.length === 1 ? "file" : "files"
+      } in ${dirName}!`,
     });
   } catch (error) {
     if (error instanceof Error) {
-      logger.error(`handleLargeFileSet error: ${error.message}`);
-      logger.error(`Stack: ${error.stack}`);
-    } else {
-      logger.error(`Unknown handleLargeFileSet error: ${error}`);
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
     }
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.FAILED,
-      message: `Failed to save files in ${
-        currentPath || "root"
-      } --handleLargeFileSet`,
+      message: `❌ Unable to process files in ${dirName}. We're looking into this issue.`,
     });
 
     throw error;
@@ -298,13 +264,15 @@ async function processFilesInBatches(
 }
 
 directoryWorker.on("failed", (job, error) => {
-  const { path } = job?.data;
-  logger.error(`Directory at  ${path} processing failed.`);
+  if (error instanceof Error) {
+    console.log("error.stack is ", error.stack);
+    console.log("error.message is ", error.message);
+  }
+  console.log("Error occurred in directory worker");
 });
 
 directoryWorker.on("completed", async (job) => {
-  const { path } = job.data;
-  logger.success(`Directory at  ${path} processing completed.`);
+  console.log("Directory Worker completed successfully.");
 });
 
 // Gracefully shutdown Prisma when worker exits
