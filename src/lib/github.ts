@@ -1,5 +1,4 @@
 import { Octokit } from "@octokit/rest";
-import { v4 as uuidv4 } from "uuid";
 import { GitHubContent } from "../interfaces/github.js";
 import { sendProcessingUpdate } from "./pusher/send-update.js";
 
@@ -104,8 +103,6 @@ export async function fetchGithubContent(
         }
 
         await sendProcessingUpdate(repositoryId, {
-          id: uuidv4(),
-          timestamp: new Date(),
           status: "PROCESSING",
           message: `Fetching ${item.path}`,
         });

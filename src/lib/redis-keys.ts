@@ -1,7 +1,3 @@
-export const analysisWorkerTotalJobsRedisKey = "analysisWorkerTotalJobs:";
-export const analysisWorkerCompletedJobsRedisKey =
-  "analysisWorkerCompletedJobs:";
-
 export function getDirectoryWorkerTotalJobsRedisKey(repositoryId: string) {
   return `${repositoryId}:directoryWorkerTotalJobs`;
 }
@@ -16,4 +12,12 @@ export function getSummaryWorkerTotalJobsRedisKey(repositoryId: string) {
 
 export function getSummaryWorkerCompletedJobsRedisKey(repositoryId: string) {
   return `${repositoryId}:summaryWorkerCompletedJobs`;
+}
+
+export function getAnalysisWorkerTotalJobsRedisKey(repositoryId: string) {
+  return `${repositoryId}:analysisWorkerTotalJobs`;
+}
+
+export function getAnalysisWorkerCompletedJobsRedisKey(repositoryId: string) {
+  return `${repositoryId}:analysisWorkerCompletedJobs`;
 }

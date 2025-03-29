@@ -25,7 +25,6 @@ async function startSummaryWorker(repositoryId: string) {
     getDirectoryWorkerTotalJobsRedisKey(repositoryId);
   const directoryWorkerCompletedJobsKey =
     getDirectoryWorkerCompletedJobsRedisKey(repositoryId);
-
   const summaryWorkerTotalJobsKey =
     getSummaryWorkerCompletedJobsRedisKey(repositoryId);
 
@@ -122,7 +121,7 @@ export const directoryWorker = new Worker(
       });
       const parentDirId = directory?.id || null;
 
-      const directoryData = directories.map((dir) => {
+      const createDirectory = directories.map((dir) => {
         return prisma.directory.create({
           data: {
             path: dir.path,
@@ -133,7 +132,7 @@ export const directoryWorker = new Worker(
       });
 
       // Run everything inside a transaction to limit connections
-      await prisma.$transaction(directoryData);
+      await prisma.$transaction(createDirectory);
 
       await processFilesInBatches(files, repositoryId, path, parentDirId);
 

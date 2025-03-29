@@ -1,38 +1,32 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import {
   generateBatchSummaries,
   generateRepositoryOverview,
 } from "../lib/gemini.js";
-import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
-  analysisWorkerCompletedJobsRedisKey,
-  analysisWorkerTotalJobsRedisKey,
-  summaryWorkerCompletedJobsRedisKey,
-  summaryWorkerTotalJobsRedisKey,
+  getAnalysisWorkerTotalJobsRedisKey,
+  getSummaryWorkerCompletedJobsRedisKey,
+  getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
-import redisConnection from "../lib/redis.js";
+import redisClient from "../lib/redis.js";
 import { analysisQueue } from "../queues/repository.js";
 
 async function generateRepoOverview(repositoryId: string) {
   const summaryWorkerTotalJobsKey =
-    summaryWorkerTotalJobsRedisKey + repositoryId;
+    getSummaryWorkerTotalJobsRedisKey(repositoryId);
   const summaryWorkerCompletedJobsKey =
-    summaryWorkerCompletedJobsRedisKey + repositoryId;
-
+    getSummaryWorkerCompletedJobsRedisKey(repositoryId);
   const analysisWorkerTotalJobsKey =
-    analysisWorkerTotalJobsRedisKey + repositoryId;
-  const analysisWorkerCompletedJobsKey =
-    analysisWorkerCompletedJobsRedisKey + repositoryId;
+    getAnalysisWorkerTotalJobsRedisKey(repositoryId);
 
-  const summaryWorkerTotalJobs = await redisConnection.get(
+  const summaryWorkerTotalJobs = await redisClient.get(
     summaryWorkerTotalJobsKey
   );
-  const summaryWorkerCompletedJobs = await redisConnection.get(
+  const summaryWorkerCompletedJobs = await redisClient.get(
     summaryWorkerCompletedJobsKey
   );
 
@@ -42,18 +36,15 @@ async function generateRepoOverview(repositoryId: string) {
   console.log("-------------------------------------------------------");
 
   if (summaryWorkerCompletedJobs === summaryWorkerTotalJobs) {
-    logger.info("-------------------------------------------------------");
-    logger.info(
+    console.log("-------------------------------------------------------");
+    console.log(
       "Inside the if of summaryWorkerCompletedJobs === summaryWorkerTotalJobs"
     );
-    logger.info("-------------------------------------------------------");
+    console.log("-------------------------------------------------------");
 
-    // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
-      message: "Generated Summaries For all Files...",
+      message: "✅ All file summaries successfully generated!",
     });
 
     const repoOverview = await generateRepositoryOverview(repositoryId);
@@ -67,11 +58,7 @@ async function generateRepoOverview(repositoryId: string) {
       select: { id: true, path: true, content: true },
     });
 
-    redisConnection.set(
-      analysisWorkerTotalJobsKey,
-      filesWithoutAnalysis.length
-    );
-    redisConnection.set(analysisWorkerCompletedJobsKey, 0);
+    redisClient.set(analysisWorkerTotalJobsKey, filesWithoutAnalysis.length);
 
     filesWithoutAnalysis.map((file) => {
       analysisQueue.add(QUEUES.ANALYSIS, {
@@ -79,9 +66,6 @@ async function generateRepoOverview(repositoryId: string) {
         file,
       });
     });
-
-    await redisConnection.del(summaryWorkerCompletedJobsKey);
-    await redisConnection.del(summaryWorkerTotalJobsKey);
   }
 }
 
@@ -91,40 +75,35 @@ export const summaryWorker = new Worker(
     const { repositoryId, files } = job.data;
 
     const summaryWorkerCompletedJobsKey =
-      summaryWorkerCompletedJobsRedisKey + repositoryId;
+      getSummaryWorkerCompletedJobsRedisKey(repositoryId);
 
     try {
       // Generate summaries for this batch
       const summaries = await generateBatchSummaries(files);
 
-      // Update the database with these summaries
-      await prisma.$transaction(
-        summaries.map((summary: { id: string; summary: string }) =>
-          prisma.file.update({
-            where: { id: summary.id },
-            data: { shortSummary: summary.summary },
-          })
-        )
-      );
+      const updateSummary = summaries.map((summary) => {
+        return prisma.file.update({
+          where: { id: summary.id },
+          data: { shortSummary: summary.summary },
+        });
+      });
+
+      await prisma.$transaction(updateSummary);
 
       // Update progress
-      await redisConnection.incr(summaryWorkerCompletedJobsKey);
+      await redisClient.incr(summaryWorkerCompletedJobsKey);
 
-      // Notify frontend of progress
+      // Humanize the message
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
-        message: `Generated short summaries for batch another batch of ${files.length} files`,
+        message: `🔍 Processing in progress: generating summary for files...`,
       });
 
       return { status: "SUCCESS", processed: files.length };
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Summary worker error: ${error.message}`);
-        logger.error(`Stack: ${error.stack}`);
-      } else {
-        logger.error(`Unknown summary worker error: ${error}`);
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
       }
 
       await prisma.repository.update({
@@ -132,29 +111,30 @@ export const summaryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.FAILED,
-        message: `Failed to generate short summary.`,
+        message: `❌ Oops! We encountered an issue while generating summaries. Please try again later.`,
       });
     } finally {
       await generateRepoOverview(repositoryId);
     }
   },
   {
-    connection: redisConnection,
+    connection: redisClient,
     concurrency: 5,
   }
 );
 
-summaryWorker.on("failed", () => {
-  logger.error(`Summary Worker failed.`);
+summaryWorker.on("failed", (job, error) => {
+  if (error instanceof Error) {
+    console.log("error.stack is ", error.stack);
+    console.log("error.message is ", error.message);
+  }
+  console.log("Error occurred in Summary worker");
 });
 
 summaryWorker.on("completed", async () => {
-  logger.success(`Summary Worker processing completed.`);
+  console.log("Summary Worker completed successfully.");
 });
 
 // Gracefully shutdown Prisma when worker exits

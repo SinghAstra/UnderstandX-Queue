@@ -1,27 +1,26 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import { generateFileAnalysis } from "../lib/gemini.js";
-import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
+
 import {
-  analysisWorkerCompletedJobsRedisKey,
-  analysisWorkerTotalJobsRedisKey,
+  getAnalysisWorkerCompletedJobsRedisKey,
+  getAnalysisWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
-import redisConnection from "../lib/redis.js";
+import redisClient from "../lib/redis.js";
 
 async function updateRepositoryStatus(repositoryId: string) {
   const analysisWorkerTotalJobsKey =
-    analysisWorkerTotalJobsRedisKey + repositoryId;
+    getAnalysisWorkerTotalJobsRedisKey(repositoryId);
   const analysisWorkerCompletedJobsKey =
-    analysisWorkerCompletedJobsRedisKey + repositoryId;
+    getAnalysisWorkerCompletedJobsRedisKey(repositoryId);
 
-  const analysisWorkerTotalJobs = await redisConnection.get(
+  const analysisWorkerTotalJobs = await redisClient.get(
     analysisWorkerTotalJobsKey
   );
-  const analysisWorkerCompletedJobs = await redisConnection.get(
+  const analysisWorkerCompletedJobs = await redisClient.get(
     analysisWorkerCompletedJobsKey
   );
 
@@ -31,17 +30,16 @@ async function updateRepositoryStatus(repositoryId: string) {
   console.log("-------------------------------------------------------");
 
   if (analysisWorkerCompletedJobs === analysisWorkerTotalJobs) {
-    logger.info("-------------------------------------------------------");
-    logger.info(
+    console.log("-------------------------------------------------------");
+    console.log(
       "Inside the if of analysisWorkerCompletedJobs === analysisWorkerTotalJobs"
     );
-    logger.info("-------------------------------------------------------");
+    console.log("-------------------------------------------------------");
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.PROCESSING,
-      message: "Generated Analysis For all Files...",
+      message:
+        "🎉 Amazing! In-depth analysis completed for all files in your repository!",
     });
 
     await prisma.repository.update({
@@ -50,17 +48,14 @@ async function updateRepositoryStatus(repositoryId: string) {
     });
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.SUCCESS,
-      message: "Please Wait For Few more seconds ...",
+      message:
+        "✨ Success! Your repository has been fully processed and is ready to explore!",
     });
 
     await sendProcessingUpdate(repositoryId, {
-      id: uuid(),
-      timestamp: new Date(),
       status: RepositoryStatus.SUCCESS,
-      message: "Repository processing completed",
+      message: "⏳ Almost there! Redirecting you in a few seconds...",
     });
   }
 }
@@ -70,7 +65,7 @@ export const analysisWorker = new Worker(
   async (job) => {
     const { repositoryId, file } = job.data;
     const analysisWorkerCompletedJobsKey =
-      analysisWorkerCompletedJobsRedisKey + repositoryId;
+      getAnalysisWorkerCompletedJobsRedisKey(repositoryId);
 
     try {
       const analysis = await generateFileAnalysis(repositoryId, file);
@@ -88,18 +83,14 @@ export const analysisWorker = new Worker(
       console.log("Generated File Analysis for ", file.path);
 
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
-        message: `Generated Analysis for ${file.path}.`,
+        message: `🔎 Analyzing: Just completed deep analysis of "${file.path}"`,
       });
-      await redisConnection.incr(analysisWorkerCompletedJobsKey);
+      await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Analysis worker error: ${error.message}`);
-        logger.error(`Stack: ${error.stack}`);
-      } else {
-        logger.error(`Unknown analysis worker error: ${error}`);
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
       }
 
       await prisma.repository.update({
@@ -107,31 +98,30 @@ export const analysisWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      // Notify user about failure
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.FAILED,
-        message: `Failed to generate file analysis.`,
+        message: `❌ We hit a snag while analyzing "${file.path}". Please try again later.`,
       });
     } finally {
       await updateRepositoryStatus(repositoryId);
     }
   },
   {
-    connection: redisConnection,
+    connection: redisClient,
     concurrency: 5,
   }
 );
 
 analysisWorker.on("failed", (job, error) => {
-  const { file } = job?.data;
-  logger.error(`Analysis Worker at  ${file.path} processing failed.`);
+  if (error instanceof Error) {
+    console.log("error.stack is ", error.stack);
+    console.log("error.message is ", error.message);
+  }
+  console.log("Error occurred in analysis worker");
 });
 
-analysisWorker.on("completed", async (job) => {
-  const { file } = job.data;
-  logger.success(`Analysis Worker at  ${file.path} processing completed.`);
+analysisWorker.on("completed", () => {
+  console.log("Analysis Worker completed successfully.");
 });
 
 // Gracefully shutdown Prisma when worker exits
