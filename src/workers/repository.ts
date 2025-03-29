@@ -1,22 +1,20 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import { parseGithubUrl } from "../lib/github.js";
-import logger from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   directoryWorkerCompletedJobsRedisKey,
   directoryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
-import { default as redisConnection } from "../lib/redis.js";
+import redisClient from "../lib/redis.js";
 import { directoryQueue } from "../queues/repository.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
   async (job) => {
-    const startTime = Date.now();
+    console.log("Starting repository worker...");
     const { repositoryId, githubUrl } = job.data;
 
     try {
@@ -33,10 +31,8 @@ export const repositoryWorker = new Worker(
         },
       });
 
-      // Send update to frontend that processing has started
+      // TODO: Humanize the message
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.PROCESSING,
         message: `Started processing repository: ${repo}`,
       });
@@ -48,11 +44,11 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      await redisConnection.set(
+      await redisClient.set(
         directoryWorkerTotalJobsRedisKey + repositoryId,
         "1"
       );
-      await redisConnection.set(
+      await redisClient.set(
         directoryWorkerCompletedJobsRedisKey + repositoryId,
         "0"
       );
@@ -64,33 +60,20 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      const endTime = Date.now();
-      logger.success(
-        `Worker processing time for repository ${repo}: ${
-          endTime - startTime
-        } milliseconds`
-      );
-
       return { status: "SUCCESS", message: "Started Processing Repository" };
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Repository worker error: ${error.message}`);
-        logger.error(`Stack: ${error.stack}`);
-      } else {
-        logger.error(`Unknown repository worker error: ${error}`);
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
       }
 
-      await redisConnection.del(
-        directoryWorkerTotalJobsRedisKey + repositoryId
-      );
-      await redisConnection.del(
+      await redisClient.del(directoryWorkerTotalJobsRedisKey + repositoryId);
+      await redisClient.del(
         directoryWorkerCompletedJobsRedisKey + repositoryId
       );
 
-      // Notify user about failure
+      // TODO : Humanize this message
       await sendProcessingUpdate(repositoryId, {
-        id: uuid(),
-        timestamp: new Date(),
         status: RepositoryStatus.FAILED,
         message: `Failed to process repository.`,
       });
@@ -105,21 +88,21 @@ export const repositoryWorker = new Worker(
     }
   },
   {
-    connection: redisConnection,
+    connection: redisClient,
     concurrency: 5,
   }
 );
 
 repositoryWorker.on("failed", (job, error) => {
-  logger.error(
-    `Job ${job?.id} in ${QUEUES.REPOSITORY} queue failed with error: ${error.message}`
-  );
+  if (error instanceof Error) {
+    console.log("error.stack is ", error.stack);
+    console.log("error.message is ", error.message);
+  }
+  console.log("Error occurred in repository worker");
 });
 
 repositoryWorker.on("completed", (job) => {
-  logger.success(
-    `Job ${job.id} in ${QUEUES.REPOSITORY} queue completed successfully`
-  );
+  console.log("Repository worker completed");
 });
 
 // Gracefully shutdown Prisma when worker exits

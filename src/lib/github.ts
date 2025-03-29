@@ -20,7 +20,7 @@ export function parseGithubUrl(url: string) {
   const regex = /github\.com\/([^\/]+)\/([^\/]+)/;
 
   if (!url) {
-    return { isValid: false, error: "Please enter a GitHub repository URL" };
+    return { isValid: false, message: "Please enter a GitHub repository URL" };
   }
 
   const match = url.match(regex);
@@ -29,7 +29,7 @@ export function parseGithubUrl(url: string) {
     if (!match) {
       return {
         isValid: false,
-        error: "Please enter a valid GitHub repository URL.",
+        message: "Please enter a valid GitHub repository URL.",
       };
     }
 
@@ -42,7 +42,7 @@ export function parseGithubUrl(url: string) {
   } catch {
     return {
       isValid: false,
-      error: "Please enter a valid URL",
+      message: "Please enter a valid URL",
     };
   }
 }

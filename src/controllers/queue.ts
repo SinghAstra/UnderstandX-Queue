@@ -2,13 +2,10 @@ import { Request, Response } from "express";
 import { QUEUES } from "../lib/constants.js";
 import { repositoryQueue } from "../queues/repository.js";
 
-export const repositoryQueueController = async (
-  req: Request,
-  res: Response
-) => {
+export const addJobToRepositoryQueue = async (req: Request, res: Response) => {
   try {
     const { repositoryId, userId, githubUrl } = req.body.auth;
-    console.log("req.body.auth --repositoryQueueController is ", req.body.auth);
+    console.log("req.body.auth --addJobToRepositoryQueue is ", req.body.auth);
 
     // Add job to the repository queue
     await repositoryQueue.add(
@@ -29,7 +26,12 @@ export const repositoryQueueController = async (
 
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error("Error queueing repository job:", error);
-    res.status(500).json({ error: "Failed to queue repository job" });
+    if (error instanceof Error) {
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
+    }
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to queue repository job" });
   }
 };
