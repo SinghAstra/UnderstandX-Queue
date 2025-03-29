@@ -1,14 +1,15 @@
 import express, { Request, Response } from "express";
 import logger from "./lib/logger.js";
 import cleanRoutes from "./routes/clean.js";
-import queueRoutes from "./routes/queue.js";
+// import queueRoutes from "./routes/queue.js";
+import "dotenv/config";
 
 const app = express();
 const PORT = 5000;
 
 app.use(express.json());
 
-app.use("/api/queue", queueRoutes);
+// app.use("/api/queue", queueRoutes);
 app.use("/api/clean", cleanRoutes);
 
 app.get("/", (req: Request, res: Response) => {
