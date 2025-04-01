@@ -21,3 +21,15 @@ export function getAnalysisWorkerTotalJobsRedisKey(repositoryId: string) {
 export function getAnalysisWorkerCompletedJobsRedisKey(repositoryId: string) {
   return `${repositoryId}:analysisWorkerCompletedJobs`;
 }
+
+export function getGeminiRequestsThisMinuteRedisKey() {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  return `${currentMinute}:rateLimitGeminiRequests`;
+}
+
+export function getGeminiTokensConsumedThisMinuteRedisKey() {
+  const now = Date.now();
+  const currentMinute = Math.floor(now / 60000);
+  return `${currentMinute}:rateLimitGeminiTokensConsumed`;
+}

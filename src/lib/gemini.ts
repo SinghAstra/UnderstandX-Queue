@@ -2,7 +2,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { File } from "@prisma/client";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
-import redisConnection from "./redis.js";
+import {
+  getGeminiRequestsThisMinuteRedisKey,
+  getGeminiTokensConsumedThisMinuteRedisKey,
+} from "./redis-keys.js";
+import redisClient from "./redis.js";
 
 dotenv.config();
 
@@ -21,28 +25,29 @@ type ParsedSummary = {
   summary: string;
 };
 
-const geminiApiKey = process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const modelName = "gemini-2.0-flash";
 
-if (!geminiApiKey) {
+if (!GEMINI_API_KEY) {
   throw new Error("Missing GEMINI_API_KEY environment variable.");
 }
-const gemini = new GoogleGenerativeAI(geminiApiKey);
+
+const gemini = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = gemini.getGenerativeModel({
   model: modelName,
 });
 
 export async function trackRequest(tokenCount: number) {
-  const now = Date.now();
-  const currentMinute = Math.floor(now / 60000);
-  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+  const geminiRequestsCountKey = getGeminiRequestsThisMinuteRedisKey();
+  const geminiRequestsTokenConsumedKey =
+    getGeminiTokensConsumedThisMinuteRedisKey();
 
-  const result = await redisConnection
+  const result = await redisClient
     .multi()
-    .incr(`${key}:requests`)
-    .incrby(`${key}:tokens`, tokenCount)
-    .expire(`${key}:requests`, 60)
-    .expire(`${key}:tokens`, 60)
+    .incr(geminiRequestsCountKey)
+    .incrby(geminiRequestsTokenConsumedKey, tokenCount)
+    .expire(geminiRequestsCountKey, 60)
+    .expire(geminiRequestsTokenConsumedKey, 60)
     .exec();
 
   if (!result) {
@@ -60,13 +65,13 @@ export async function trackRequest(tokenCount: number) {
 }
 
 export async function checkLimits() {
-  const now = Date.now();
-  const currentMinute = Math.floor(now / 60000);
-  const key = `${RATE_LIMIT_KEY}:${currentMinute}`;
+  const geminiRequestsCountKey = getGeminiRequestsThisMinuteRedisKey();
+  const geminiRequestsTokenConsumedKey =
+    getGeminiTokensConsumedThisMinuteRedisKey();
 
-  const [requests, tokens] = await redisConnection.mget(
-    `${key}:requests`,
-    `${key}:tokens`
+  const [requests, tokens] = await redisClient.mget(
+    geminiRequestsCountKey,
+    geminiRequestsTokenConsumedKey
   );
 
   return {
@@ -86,18 +91,7 @@ export async function estimateTokenCount(
   prompt: string,
   maxOutputTokens = 1000
 ) {
-  try {
-    return Math.ceil(prompt.length / 4) + maxOutputTokens;
-  } catch (error) {
-    console.log("Could not estimate token Count");
-    if (error instanceof Error) {
-      console.log("--------------------------------------");
-      console.log("error.stack is ", error.stack);
-      console.log("error.message is ", error.message);
-      console.log("--------------------------------------");
-    }
-    throw new Error("Could not estimate token count.");
-  }
+  return Math.ceil(prompt.length / 4) + maxOutputTokens;
 }
 
 export async function handleRateLimit(tokenCount: number) {
@@ -119,10 +113,8 @@ export async function handleRateLimit(tokenCount: number) {
 async function handleRequestExceeded() {
   console.log("-------------------------------");
   console.log("In handleRequest exceeded");
-  const now = Date.now();
-  const currentMinute = Math.floor(now / 60000);
-  const key = `${RATE_LIMIT_KEY}:${currentMinute}:requests`;
-  await redisConnection.set(key, 16);
+  const geminiRequestsCountKey = getGeminiRequestsThisMinuteRedisKey();
+  await redisClient.set(geminiRequestsCountKey, 16);
   const limitsResponse = await checkLimits();
   console.log("limitsResponse:", limitsResponse);
   console.log("-------------------------------");
@@ -245,22 +237,23 @@ export async function generateBatchSummaries(
 }
 
 export async function generateRepositoryOverview(repositoryId: string) {
-  try {
-    // Fetch all file paths and summaries
-    const files = await prisma.file.findMany({
-      where: { repositoryId },
-      select: { path: true, shortSummary: true },
-    });
+  for (let i = 0; i < 5; i++) {
+    try {
+      // Fetch all file paths and summaries
+      const files = await prisma.file.findMany({
+        where: { repositoryId },
+        select: { path: true, shortSummary: true },
+      });
 
-    // Format file summaries for the prompt
-    const fileSummaries = files
-      .map(
-        (file) =>
-          `- ${file.path}: ${file.shortSummary || "No summary available"}`
-      )
-      .join("\n");
+      // Format file summaries for the prompt
+      const fileSummaries = files
+        .map(
+          (file) =>
+            `- ${file.path}: ${file.shortSummary || "No summary available"}`
+        )
+        .join("\n");
 
-    const prompt = `
+      const prompt = `
       You are a coding assistant.
       Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
@@ -289,27 +282,38 @@ export async function generateRepositoryOverview(repositoryId: string) {
       Please generate the MDX project overview as plain text.
       `;
 
-    const tokenCount = await estimateTokenCount(prompt);
+      const tokenCount = await estimateTokenCount(prompt);
 
-    await handleRateLimit(tokenCount);
+      await handleRateLimit(tokenCount);
 
-    const result = await model.generateContent(prompt);
+      const result = await model.generateContent(prompt);
 
-    const repositoryOverview = result.response.text();
+      const repositoryOverview = result.response.text();
 
-    console.log("repositoryOverview is ", repositoryOverview);
+      console.log("repositoryOverview is ", repositoryOverview);
 
-    return repositoryOverview;
-  } catch (error) {
-    if (error instanceof Error) {
-      console.log("--------------------------------");
-      console.log("error.stack is ", error.stack);
-      console.log("error.message is ", error.message);
-      console.log("--------------------------------");
+      return repositoryOverview;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("--------------------------------");
+        console.log("error.stack is ", error.stack);
+        console.log("error.message is ", error.message);
+        console.log("--------------------------------");
+      }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
+      ) {
+        await handleRequestExceeded();
+        sleepForOneMinute();
+        continue;
+      }
+
+      throw new Error(
+        "Could Not generate Repository overview, maybe ai model is down."
+      );
     }
-    throw new Error(
-      "Could Not generate Repository overview, maybe ai model is down."
-    );
   }
 }
 
@@ -402,20 +406,9 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       const result = await model.generateContent(prompt);
 
       const rawResponse = result.response.text();
-      console.log("-------------------------------");
-      console.log(
-        "Updated generateContent prompt args rawResponse",
-        rawResponse
-      );
-      console.log("typeof rawResponse", typeof rawResponse);
-      console.log("-------------------------------");
 
       if (typeof rawResponse !== "string") {
-        console.log("-------------------------------");
-        console.log("rawResponse is not a string", rawResponse);
-        console.log(`Trying again for ${i + 1} time`);
-        console.log("-------------------------------");
-        continue;
+        throw new Error("rawResponse is not a string");
       }
 
       return rawResponse;
@@ -434,6 +427,13 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       ) {
         await handleRequestExceeded();
         sleepForOneMinute();
+        continue;
+      }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("rawResponse is not a string")
+      ) {
         continue;
       }
 
