@@ -31,7 +31,7 @@ export const repositoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `📥 Downloading repository: ${repo}... `,
+        message: `📥Downloading repository: ${repo}... `,
       });
 
       await prisma.repository.update({
@@ -67,7 +67,7 @@ export const repositoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: "⚠️ Oops! Something went wrong. Please try again later. ",
+        message: "⚠️Oops! Something went wrong. Please try again later. ",
       });
 
       // Update status to failed

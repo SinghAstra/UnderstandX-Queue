@@ -1,4 +1,4 @@
-// import { Queue } from "bullmq";
+import { Queue } from "bullmq";
 import "dotenv/config";
 import { Request, Response, Router } from "express";
 import { QUEUES } from "../lib/constants.js";
@@ -23,14 +23,15 @@ router.get("/jobs", async (_req: Request, res: Response) => {
     const keys = await redisConnection.keys("bull:*");
     console.log("keys is ", keys);
 
-    // if (keys.length === 0) {
-    //   return res.status(200).json({ message: "No jobs found to clean" });
-    // }
+    if (keys.length === 0) {
+      res.status(200).json({ message: "No jobs found to clean" });
+      return;
+    }
 
     // Delete all BullMQ related keys
-    // if (keys.length > 0) {
-    //   await redisConnection.del(...keys);
-    // }
+    if (keys.length > 0) {
+      await redisConnection.del(...keys);
+    }
 
     const queueNames = [
       QUEUES.DIRECTORY,
@@ -39,14 +40,14 @@ router.get("/jobs", async (_req: Request, res: Response) => {
       QUEUES.SUMMARY,
     ];
 
-    // for (const queueName of queueNames) {
-    //   const queue = new Queue(queueName, { connection: redisConnection });
-    //   await queue.obliterate({ force: true });
-    //   await queue.close();
-    // }
+    for (const queueName of queueNames) {
+      const queue = new Queue(queueName, { connection: redisConnection });
+      await queue.obliterate({ force: true });
+      await queue.close();
+    }
 
     res.status(200).json({
-      // message: `Successfully cleaned ${keys.length} BullMQ related keys`,
+      message: `Successfully cleaned ${keys.length} BullMQ related keys`,
       queuesEmptied: queueNames,
     });
   } catch (error) {

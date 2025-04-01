@@ -55,7 +55,7 @@ async function updateRepositoryStatus(repositoryId: string) {
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
       message:
-        "🎉 Amazing! In-depth analysis completed for all files in your repository!",
+        "🎉Amazing! In-depth analysis completed for all files in your repository!",
     });
 
     await prisma.repository.update({
@@ -66,12 +66,12 @@ async function updateRepositoryStatus(repositoryId: string) {
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.SUCCESS,
       message:
-        "✨ Success! Your repository has been fully processed and is ready to explore!",
+        "✨Success! Your repository has been fully processed and is ready to explore!",
     });
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.SUCCESS,
-      message: "⏳ Almost there! Redirecting you in a few seconds...",
+      message: "⏳Almost there! Redirecting you in a few seconds...",
     });
   }
 }
@@ -100,7 +100,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔎 Analyzing ${file.path}`,
+        message: `🔎Analyzing ${file.path}`,
       });
       await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {
@@ -116,7 +116,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `⚠️ Oops!  We hit a snag while analyzing "${file.path}". Please try again later. `,
+        message: `⚠️Oops! We hit a snag while analyzing "${file.path}". Please try again later. `,
       });
     } finally {
       await updateRepositoryStatus(repositoryId);

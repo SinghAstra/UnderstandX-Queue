@@ -44,7 +44,7 @@ async function generateRepoOverview(repositoryId: string) {
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: "✅ All file summaries successfully generated!",
+      message: "✅All file summaries successfully generated!",
     });
 
     const repoOverview = await generateRepositoryOverview(repositoryId);
@@ -95,7 +95,7 @@ export const summaryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔍 Generating summary for files...`,
+        message: `🔍Generating summary for files...`,
       });
 
       return { status: "SUCCESS", processed: files.length };
@@ -112,7 +112,7 @@ export const summaryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `⚠️ Oops!  We encountered an issue while generating summaries. Please try again later. `,
+        message: `⚠️Oops!  We encountered an issue while generating summaries. Please try again later. `,
       });
     } finally {
       await generateRepoOverview(repositoryId);

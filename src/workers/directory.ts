@@ -52,7 +52,7 @@ async function startSummaryWorker(repositoryId: string) {
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: "🔍 Now studying your files to create summaries...",
+      message: "🔍Studying your files to create summaries...",
     });
 
     // Fetch the Files of the repository that do not have short summary
@@ -104,7 +104,7 @@ export const directoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: ` Downloading the 📂 ${dirName} directory...`,
+        message: ` Downloading the 📂${dirName} directory...`,
       });
 
       const directories = items.filter((item) => item.type === "dir");
@@ -154,7 +154,7 @@ export const directoryWorker = new Worker(
       // Notify user that this directory is fully processed
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `✅ Finished downloading the ${dirName} directory`,
+        message: `✅Finished downloading the ${dirName} directory`,
       });
 
       await redisClient.incr(directoryWorkerCompletedJobsKey);
@@ -173,7 +173,7 @@ export const directoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `⚠️ Oops! We couldn't process the ${dirName} directory. Please try again later. `,
+        message: `⚠️Oops! We couldn't process the ${dirName} directory. Please try again later. `,
       });
     } finally {
       // Check if processing is complete
@@ -199,7 +199,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: `Downloading ${fileCount}  📄 ${
+      message: `Downloading ${fileCount} 📄${
         fileCount === 1 ? "file" : "files"
       } in ${dirName}...`,
     });
@@ -240,13 +240,13 @@ async function processFilesInBatches(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `⏳ Saving files in ${dirName}: ${progress}% complete`,
+        message: `⏳Saving files in ${dirName}: ${progress}% complete`,
       });
     }
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: `🎉 Successfully downloaded all ${files.length} ${
+      message: `🎉Successfully downloaded  ${files.length} ${
         files.length === 1 ? "file" : "files"
       } in ${dirName}!`,
     });
@@ -258,7 +258,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.FAILED,
-      message: `⚠️ Oops! Something went wrong in ${dirName}. Please try again later. `,
+      message: `⚠️Oops! Something went wrong in ${dirName}. Please try again later. `,
     });
 
     throw error;
