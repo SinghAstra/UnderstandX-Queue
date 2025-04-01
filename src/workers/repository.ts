@@ -38,7 +38,7 @@ export const repositoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔍 Analyzing repository: ${repo}... Getting things ready for you!`,
+        message: `📥 Downloading repository: ${repo}... `,
       });
 
       console.log("About to be added in directoryQueue ", {

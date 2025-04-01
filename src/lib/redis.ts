@@ -11,6 +11,7 @@ if (!REDIS_URL) {
 
 const redisClient = new Redis(REDIS_URL, {
   retryStrategy: () => null,
+  maxRetriesPerRequest: null,
   tls: {
     rejectUnauthorized: false,
   },

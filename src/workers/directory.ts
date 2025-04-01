@@ -13,7 +13,7 @@ import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   getDirectoryWorkerCompletedJobsRedisKey,
   getDirectoryWorkerTotalJobsRedisKey,
-  getSummaryWorkerCompletedJobsRedisKey,
+  getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
 import { directoryQueue, summaryQueue } from "../queues/repository.js";
@@ -26,7 +26,7 @@ async function startSummaryWorker(repositoryId: string) {
   const directoryWorkerCompletedJobsKey =
     getDirectoryWorkerCompletedJobsRedisKey(repositoryId);
   const summaryWorkerTotalJobsKey =
-    getSummaryWorkerCompletedJobsRedisKey(repositoryId);
+    getSummaryWorkerTotalJobsRedisKey(repositoryId);
 
   const directoryWorkerCompletedJobs = await redisClient.get(
     directoryWorkerCompletedJobsKey
@@ -52,7 +52,7 @@ async function startSummaryWorker(repositoryId: string) {
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: "🔍 Now analyzing your files to create summaries...",
+      message: "🔍 Now studying your files to create summaries...",
     });
 
     // Fetch the Files of the repository that do not have short summary
@@ -62,6 +62,7 @@ async function startSummaryWorker(repositoryId: string) {
     });
 
     const batchSizeForShortSummary = FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY;
+
     const totalBatchesForShortSummary = Math.ceil(
       filesWithoutSummary.length / batchSizeForShortSummary
     );
@@ -134,7 +135,9 @@ export const directoryWorker = new Worker(
       // Run everything inside a transaction to limit connections
       await prisma.$transaction(createDirectory);
 
-      await processFilesInBatches(files, repositoryId, path, parentDirId);
+      if (files.length > 0) {
+        await processFilesInBatches(files, repositoryId, path, parentDirId);
+      }
 
       // Queue subdirectories for processing
       await Promise.all(

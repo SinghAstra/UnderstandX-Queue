@@ -104,7 +104,7 @@ export async function fetchGithubContent(
 
         await sendProcessingUpdate(repositoryId, {
           status: "PROCESSING",
-          message: `Fetching ${item.path}`,
+          message: `📥 Downloading ${item.path}...`,
         });
       } else if (item.type === "dir") {
         items.push({
@@ -115,7 +115,10 @@ export async function fetchGithubContent(
       }
     }
   } catch (error) {
-    console.log(`Error fetching content for ${owner}/${repo}/${path}:`, error);
+    if (error instanceof Error) {
+      console.log("error.stack is ", error.stack);
+      console.log("error.message is ", error.message);
+    }
   }
 
   return items;
