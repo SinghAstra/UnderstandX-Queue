@@ -93,10 +93,9 @@ export const summaryWorker = new Worker(
       // Update progress
       await redisClient.incr(summaryWorkerCompletedJobsKey);
 
-      // Humanize the message
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔍 Processing in progress: generating summary for files...`,
+        message: `🔍 Generating summary for files...`,
       });
 
       return { status: "SUCCESS", processed: files.length };
@@ -113,7 +112,7 @@ export const summaryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `❌ Oops! We encountered an issue while generating summaries. Please try again later.`,
+        message: `⚠️ Oops!  We encountered an issue while generating summaries. Please try again later. `,
       });
     } finally {
       await generateRepoOverview(repositoryId);

@@ -29,16 +29,16 @@ export const repositoryWorker = new Worker(
         throw new Error("Invalid GitHub URL");
       }
 
+      await sendProcessingUpdate(repositoryId, {
+        status: RepositoryStatus.PROCESSING,
+        message: `📥 Downloading repository: ${repo}... `,
+      });
+
       await prisma.repository.update({
         where: { id: repositoryId },
         data: {
           status: RepositoryStatus.PROCESSING,
         },
-      });
-
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.PROCESSING,
-        message: `📥 Downloading repository: ${repo}... `,
       });
 
       console.log("About to be added in directoryQueue ", {
@@ -67,7 +67,7 @@ export const repositoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: "Oops! Something went wrong. Please try again later. ⚠️",
+        message: "⚠️ Oops! Something went wrong. Please try again later. ",
       });
 
       // Update status to failed

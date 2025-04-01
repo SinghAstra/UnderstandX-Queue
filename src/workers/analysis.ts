@@ -24,12 +24,28 @@ async function updateRepositoryStatus(repositoryId: string) {
     analysisWorkerCompletedJobsKey
   );
 
+  if (!analysisWorkerCompletedJobs || !analysisWorkerTotalJobs) {
+    console.log("analysisWorker Job Tracking Values not found in redis db.");
+    return;
+  }
+
   console.log("-------------------------------------------------------");
   console.log("analysisWorkerTotalJobs is ", analysisWorkerTotalJobs);
   console.log("analysisWorkerCompletedJobs is ", analysisWorkerCompletedJobs);
   console.log("-------------------------------------------------------");
 
-  if (analysisWorkerCompletedJobs === analysisWorkerTotalJobs) {
+  if (analysisWorkerCompletedJobs >= analysisWorkerTotalJobs) {
+    const filesWithoutAnalysis = await prisma.file.findMany({
+      where: {
+        repositoryId,
+        analysis: null,
+      },
+    });
+
+    if (filesWithoutAnalysis.length > 0) {
+      return;
+    }
+
     console.log("-------------------------------------------------------");
     console.log(
       "Inside the if of analysisWorkerCompletedJobs === analysisWorkerTotalJobs"
@@ -84,7 +100,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔎 Analyzing: Just completed deep analysis of "${file.path}"`,
+        message: `🔎 Analyzing ${file.path}`,
       });
       await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {
@@ -100,7 +116,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `❌ We hit a snag while analyzing "${file.path}". Please try again later.`,
+        message: `⚠️ Oops!  We hit a snag while analyzing "${file.path}". Please try again later. `,
       });
     } finally {
       await updateRepositoryStatus(repositoryId);

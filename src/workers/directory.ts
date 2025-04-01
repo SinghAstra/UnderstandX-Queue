@@ -104,7 +104,7 @@ export const directoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `📂 Exploring the ${dirName} directory...`,
+        message: ` Downloading the 📂 ${dirName} directory...`,
       });
 
       const directories = items.filter((item) => item.type === "dir");
@@ -154,7 +154,7 @@ export const directoryWorker = new Worker(
       // Notify user that this directory is fully processed
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `✅ Finished scanning the ${dirName} directory`,
+        message: `✅ Finished downloading the ${dirName} directory`,
       });
 
       await redisClient.incr(directoryWorkerCompletedJobsKey);
@@ -173,7 +173,7 @@ export const directoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `❌ Oops! We couldn't process the ${dirName} directory. Please try again later.`,
+        message: `⚠️ Oops! We couldn't process the ${dirName} directory. Please try again later. `,
       });
     } finally {
       // Check if processing is complete
@@ -199,7 +199,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: `📄 Processing ${fileCount} ${
+      message: `Downloading ${fileCount}  📄 ${
         fileCount === 1 ? "file" : "files"
       } in ${dirName}...`,
     });
@@ -246,7 +246,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: `🎉 Successfully processed all ${files.length} ${
+      message: `🎉 Successfully downloaded all ${files.length} ${
         files.length === 1 ? "file" : "files"
       } in ${dirName}!`,
     });
@@ -258,7 +258,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.FAILED,
-      message: `❌ Unable to process files in ${dirName}. We're looking into this issue.`,
+      message: `⚠️ Oops! Something went wrong in ${dirName}. Please try again later. `,
     });
 
     throw error;

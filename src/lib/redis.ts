@@ -10,11 +10,33 @@ if (!REDIS_URL) {
 }
 
 const redisClient = new Redis(REDIS_URL, {
-  retryStrategy: () => null,
   maxRetriesPerRequest: null,
+  retryStrategy(times) {
+    console.log("retrying redis connection");
+    if (times > 10) {
+      console.log("lost connection and exhausted attempts : ", times);
+      return null;
+    }
+    // reconnect after
+    return Math.min(times * 600, 6000);
+  },
   tls: {
     rejectUnauthorized: false,
   },
+});
+
+redisClient.on("error", (error) => {
+  console.log("----------------------------------------");
+  console.log("Redis connection error.");
+  if (error instanceof Error) {
+    console.log("error.stack is ", error.stack);
+    console.log("error.message is ", error.message);
+  }
+  console.log("----------------------------------------");
+});
+
+redisClient.on("connect", () => {
+  console.log("Successfully connected to Redis");
 });
 
 redisClient.on("end", () => {
