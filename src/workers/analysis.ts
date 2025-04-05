@@ -120,7 +120,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `⚠️Oops! We hit a snag while analyzing "${file.path}". Please try again later. `,
+        message: `⚠️Oops! failed to analyze ${file.path}. Please try again later. `,
       });
     } finally {
       await updateRepositoryStatus(repositoryId);
