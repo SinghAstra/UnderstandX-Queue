@@ -82,9 +82,10 @@ export async function checkLimits() {
   };
 }
 
-async function sleep() {
-  console.log(`Rate limit exceeded. Waiting for 2000ms...`);
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+async function sleep(i?: number) {
+  const times = i || 1;
+  console.log(`Sleeping for ${2 * times} seconds...`);
+  await new Promise((resolve) => setTimeout(resolve, 2000 * times));
 }
 
 export async function estimateTokenCount(
@@ -318,8 +319,8 @@ export async function generateRepositoryOverview(repositoryId: string) {
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  let i;
-  for (i = 0; i < 10; i++) {
+  let times = 1;
+  for (let i = 0; i < 10; i++) {
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -432,10 +433,18 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         console.log(
           'In generateFileAnalysis catch block if(error.message.includes("429 Too Many Requests")'
         );
+
         console.log("file.path is ", file.path);
         console.log(`Trying again for ${i} time`);
+
+        if (i > 5) {
+          console.log(`Reducing the value of i from ${i} to ${i - 5}`);
+          i = i - 5;
+          console.log(`Increasing times from ${times} to ${times + 1}`);
+          times = times + 1;
+        }
         await handleRequestExceeded();
-        sleep();
+        sleep(times);
         console.log("--------------------------------");
         continue;
       }
@@ -460,7 +469,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
     }
   }
 
-  throw new Error(`Tried ${i} times but could not generate file analysis.`);
+  throw new Error(`Tried ${times} times but could not generate file analysis.`);
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
