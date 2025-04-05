@@ -107,6 +107,7 @@ export const analysisWorker = new Worker(
       if (error instanceof Error) {
         console.log("---------------------------------");
         console.log("In Analysis Worker Catch Block");
+        console.log("file.path is ", file.path);
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
         console.log("---------------------------------");

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { File } from "@prisma/client";
+import { error } from "console";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
 import {
@@ -83,8 +84,8 @@ export async function checkLimits() {
 }
 
 async function sleepForOneMinute() {
-  console.log(`Rate limit exceeded. Waiting for 1000ms...`);
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  console.log(`Rate limit exceeded. Waiting for 1500ms...`);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 }
 
 export async function estimateTokenCount(
@@ -318,7 +319,8 @@ export async function generateRepositoryOverview(repositoryId: string) {
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  for (let i = 0; i < 5; i++) {
+  let i;
+  for (i = 0; i < 10; i++) {
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -413,19 +415,24 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       return rawResponse;
     } catch (error) {
-      console.log("--------------------------------");
-      console.log("file.path is ", file.path);
       if (error instanceof Error) {
+        console.log("--------------------------------");
+        console.log(
+          "In generateFileAnalysis catch block if(error instanceof Error)"
+        );
+        console.log("file.path is ", file.path);
         console.log("error.message is ", error.message);
+        console.log("--------------------------------");
       }
-      console.log("--------------------------------");
 
       if (
         error instanceof Error &&
         error.message.includes("429 Too Many Requests")
       ) {
         console.log("--------------------------------");
-        console.log("In handleRequest exceeded");
+        console.log(
+          'In generateFileAnalysis catch block if(error.message.includes("429 Too Many Requests")'
+        );
         console.log("file.path is ", file.path);
         console.log(`Trying again for ${i} time`);
         await handleRequestExceeded();
@@ -438,16 +445,23 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         error instanceof Error &&
         error.message.includes("rawResponse is not a string")
       ) {
+        console.log("--------------------------------");
+        console.log(
+          "In generateFileAnalysis catch block rawResponse is not a string"
+        );
+        console.log("--------------------------------");
         continue;
       }
 
       throw new Error(
-        "Could Not generate file analysis, maybe ai model is down."
+        error instanceof Error
+          ? error.message
+          : "Unexpected error occurred while generating file analysis."
       );
     }
   }
 
-  throw new Error("Could Not generate file analysis, maybe ai model is down.");
+  throw new Error(`Tried ${i} times but could not generate file analysis.`);
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
