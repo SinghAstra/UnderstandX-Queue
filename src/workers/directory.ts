@@ -52,7 +52,7 @@ async function startSummaryWorker(repositoryId: string) {
     // Notify user that summary generation is starting
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: "🔍Studying your files to create summaries...",
+      message: "🔍Studying files to create summaries...",
     });
 
     // Fetch the Files of the repository that do not have short summary
@@ -104,7 +104,7 @@ export const directoryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: ` Downloading the 📂${dirName} directory...`,
+        message: `📂Downloading the ${dirName} directory...`,
       });
 
       const directories = items.filter((item) => item.type === "dir");
@@ -199,7 +199,7 @@ async function processFilesInBatches(
 
     await sendProcessingUpdate(repositoryId, {
       status: RepositoryStatus.PROCESSING,
-      message: `Downloading ${fileCount} 📄${
+      message: `📄Downloading ${fileCount} ${
         fileCount === 1 ? "file" : "files"
       } in ${dirName}...`,
     });

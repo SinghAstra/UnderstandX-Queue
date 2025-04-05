@@ -105,8 +105,11 @@ export const analysisWorker = new Worker(
       await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {
       if (error instanceof Error) {
+        console.log("---------------------------------");
+        console.log("In Analysis Worker Catch Block");
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
+        console.log("---------------------------------");
       }
 
       await prisma.repository.update({

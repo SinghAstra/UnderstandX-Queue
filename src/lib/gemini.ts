@@ -416,7 +416,6 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       console.log("--------------------------------");
       console.log("file.path is ", file.path);
       if (error instanceof Error) {
-        console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
       }
       console.log("--------------------------------");
@@ -425,8 +424,13 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         error instanceof Error &&
         error.message.includes("429 Too Many Requests")
       ) {
+        console.log("--------------------------------");
+        console.log("In handleRequest exceeded");
+        console.log("file.path is ", file.path);
+        console.log(`Trying again for ${i} time`);
         await handleRequestExceeded();
         sleepForOneMinute();
+        console.log("--------------------------------");
         continue;
       }
 

@@ -112,7 +112,7 @@ export const summaryWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.FAILED,
-        message: `⚠️Oops!  We encountered an issue while generating summaries. Please try again later. `,
+        message: `⚠️Oops! We encountered an issue while generating summaries. Please try again later. `,
       });
     } finally {
       await generateRepoOverview(repositoryId);
