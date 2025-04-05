@@ -437,7 +437,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         console.log("file.path is ", file.path);
         console.log(`Trying again for ${i} time`);
 
-        if (i > 5) {
+        if (i > 5 && times < 5) {
           console.log(`Reducing the value of i from ${i} to ${i - 5}`);
           i = i - 5;
           console.log(`Increasing times from ${times} to ${times + 1}`);
