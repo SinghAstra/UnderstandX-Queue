@@ -11,9 +11,8 @@ import redisClient from "./redis.js";
 
 dotenv.config();
 
-const REQUEST_LIMIT = 15;
+const REQUEST_LIMIT = 12;
 const TOKEN_LIMIT = 800000;
-const RATE_LIMIT_KEY = "global:rate_limit";
 
 type Summary = {
   path: string;
@@ -83,9 +82,9 @@ export async function checkLimits() {
   };
 }
 
-async function sleepForOneMinute() {
-  console.log(`Rate limit exceeded. Waiting for 1500ms...`);
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+async function sleep() {
+  console.log(`Rate limit exceeded. Waiting for 2000ms...`);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 }
 
 export async function estimateTokenCount(
@@ -105,7 +104,7 @@ export async function handleRateLimit(tokenCount: number) {
   const { requestsExceeded, tokensExceeded } = limitsResponse;
 
   if (requestsExceeded || tokensExceeded) {
-    await sleepForOneMinute();
+    await sleep();
   }
 
   await trackRequest(tokenCount);
@@ -212,7 +211,7 @@ export async function generateBatchSummaries(
         error.message.includes("429 Too Many Requests")
       ) {
         await handleRequestExceeded();
-        sleepForOneMinute();
+        sleep();
         continue;
       }
 
@@ -307,7 +306,7 @@ export async function generateRepositoryOverview(repositoryId: string) {
         error.message.includes("429 Too Many Requests")
       ) {
         await handleRequestExceeded();
-        sleepForOneMinute();
+        sleep();
         continue;
       }
 
@@ -436,7 +435,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         console.log("file.path is ", file.path);
         console.log(`Trying again for ${i} time`);
         await handleRequestExceeded();
-        sleepForOneMinute();
+        sleep();
         console.log("--------------------------------");
         continue;
       }
