@@ -405,7 +405,13 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       const result = await model.generateContent(prompt);
 
-      const rawResponse = result.response.text();
+      let rawResponse = result.response.text();
+      // Remove potential Markdown or extra text
+      rawResponse = rawResponse
+        .replace(/```json/g, "") // Remove ```json
+        .replace(/```mdx/g, "") // Remove ```json
+        .replace(/```/g, "") // Remove ```
+        .trim(); // Remove leading/trailing whitespace
 
       if (typeof rawResponse !== "string") {
         throw new Error("rawResponse is not a string");

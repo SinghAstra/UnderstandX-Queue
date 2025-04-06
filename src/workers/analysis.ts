@@ -100,7 +100,7 @@ export const analysisWorker = new Worker(
 
       await sendProcessingUpdate(repositoryId, {
         status: RepositoryStatus.PROCESSING,
-        message: `🔎Analyzing ${file.path}`,
+        message: `⚙️ Analyzing ${file.path}`,
       });
       await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {

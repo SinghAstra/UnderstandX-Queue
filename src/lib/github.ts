@@ -104,7 +104,7 @@ export async function fetchGithubContent(
 
         await sendProcessingUpdate(repositoryId, {
           status: "PROCESSING",
-          message: `📥Downloading ${item.path}...`,
+          message: `📥 Downloading ${item.path}...`,
         });
       } else if (item.type === "dir") {
         items.push({
