@@ -259,9 +259,9 @@ export async function generateRepositoryOverview(repositoryId: string) {
       Your task is to generate a **structured MDX project overview** based on the provided file summaries.
 
       ## 📦 Project Overview Structure:
-      1. **Introduction:** 🎯 Briefly explain the purpose of the project, its goals, and its main use cases.
-      2. **Key Features:** 🌟 Highlight the project's core functionalities, referencing relevant files where appropriate.
-      3. **Architecture Overview:** 🏗️ Summarize how the key components interact — explain how data flows through the system.
+      1. **Introduction:** 🎯 What Problem does this repository solve ? What is the Technology Stack ? 
+      2. **Key Features:** 🌟 State the project's core functionalities, referencing relevant files where appropriate.
+      3. **Data Flow:** 🔄  explain how data flows through the system.
       4. **Conclusion:** ✅ Provide a final summary tying the features and architecture together.
 
       ## 🛠️ File Summaries:
@@ -357,14 +357,12 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       -   Explain what this file does in the project.  
       -   Highlight how it connects to the application’s flow.  
 
-      📑 File Structure Breakdown:  
-      -  List and explain the external libraries or modules used, and why they’re included.  
-      -  Identify the major parts of the file, like variables, functions, or classes.  
-      -  Describe the sequence of operations or logic within the file, if relevant.  
+      🧩 Code Breakdown by Sections:  
+      -  Divide the file into logical sections and describe what each section does in simple , plain english language.
 
-      📜 Code Explanation:  
-      -  Begin with the imports or the first significant line of code.  
-      -  Break down what each section does in simple, plain language.  
+
+      📜 Key Code:  
+      -  Briefly explain code that support the main logic. 
 
       🔁 Quick Recap:  
       - 📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.  
