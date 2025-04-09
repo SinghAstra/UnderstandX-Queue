@@ -48,7 +48,7 @@ async function updateRepositoryStatus(repositoryId: string) {
 
     console.log("-------------------------------------------------------");
     console.log(
-      "Inside the if of analysisWorkerCompletedJobs === analysisWorkerTotalJobs"
+      "Inside the if of analysisWorkerCompletedJobs >= analysisWorkerTotalJobs"
     );
     console.log("-------------------------------------------------------");
 

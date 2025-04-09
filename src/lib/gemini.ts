@@ -170,8 +170,8 @@ export async function generateBatchSummaries(
       console.log("rawResponse --generateBatchSummaries : ", rawResponse);
 
       rawResponse = rawResponse
-        .replace(/```json/g, "") // Remove ```json
-        .replace(/```/g, "") // Remove ```
+        .replace(/^```json\s*/i, "") // Remove ```json or ```mdx at start
+        .replace(/```$/i, "") // Remove ``` at the end
         .trim();
 
       const parsedResponse = JSON.parse(rawResponse);
@@ -320,6 +320,7 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
   let times = 1;
+  const backtick = "```";
   for (let i = 0; i < 10; i++) {
     try {
       const repository = await prisma.repository.findFirst({
@@ -388,6 +389,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       ## 🚀 Guidelines:
       - **MDX format:** Use proper heading levels (#, ##, ###).
       - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).
+      - **Multi Line code:**  Use triple backticks for all multiline code examples  (e.g. - For multi-line code examples, use ${backtick}tsx// your code here${backtick};)
       - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.
       - **Emojis:** Add relevant emojis to make the overview engaging add emoji before the heading text.
       - **No code block wrappers:** Do **not** use triple backticks for MDX content.
@@ -406,12 +408,22 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       const result = await model.generateContent(prompt);
 
       let rawResponse = result.response.text();
-      // Remove potential Markdown or extra text
-      rawResponse = rawResponse
-        .replace(/```json/g, "") // Remove ```json
-        .replace(/```mdx/g, "") // Remove ```json
-        .replace(/```/g, "") // Remove ```
-        .trim(); // Remove leading/trailing whitespace
+      rawResponse = rawResponse.trim();
+      if (rawResponse.startsWith("```mdx")) {
+        console.log("Starts with mdx...");
+        rawResponse = rawResponse.slice(6); // remove "```mdx"
+        rawResponse = rawResponse.trimStart(); // remove newline if any
+        if (rawResponse.endsWith("```")) {
+          rawResponse = rawResponse.slice(0, -3); // remove trailing ```
+        }
+      } else if (rawResponse.startsWith("```json")) {
+        console.log("Starts with json...");
+        rawResponse = rawResponse.slice(7); // remove "```json"
+        rawResponse = rawResponse.trimStart(); // remove newline if any
+        if (rawResponse.endsWith("```")) {
+          rawResponse = rawResponse.slice(0, -3); // remove trailing ```
+        }
+      }
 
       if (typeof rawResponse !== "string") {
         throw new Error("rawResponse is not a string");
