@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { File } from "@prisma/client";
 import { error } from "console";
 import dotenv from "dotenv";
+import { response } from "express";
 import { prisma } from "./prisma.js";
 import {
   getGeminiRequestsThisMinuteRedisKey,
@@ -320,7 +321,6 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
   let times = 1;
-  const backtick = "```";
   for (let i = 0; i < 10; i++) {
     try {
       const repository = await prisma.repository.findFirst({
@@ -386,19 +386,17 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         "No content available—analyze based on path and repo context."
       }
 
-      ## 🚀 Guidelines:
-      - **MDX format:** Use proper heading levels (#, ##, ###).
-      - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).
-      - **Multi Line code:**  Use triple backticks for all multiline code examples  (e.g. - For multi-line code examples, use ${backtick}tsx// your code here${backtick};)
-      - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.
-      - **Emojis:** Add relevant emojis to make the overview engaging add emoji before the heading text.
-      - **No code block wrappers:** Do **not** use triple backticks for MDX content.
-      -  Briefly define any technical terms to keep it beginner-friendly.  
+     ## 🚀 Guidelines:
+    - **MDX format:** Use proper heading levels (#, ##, ###).
+    - **Inline code:** Wrap code snippets in single backticks (e.g., \`exampleFunction()\`).
+    - **Multi-line code:** Use triple backticks with language identifier (e.g., \`\`\`tsx\n// your code here\n\`\`\`).
+    - **Lists:** Use \`-\` for bullets, \`1.\` for numbered lists.
+    - **Emojis:** Add relevant emojis before headings for engagement.
+    - **Beginner-friendly:** Briefly define technical terms.
+    - **Output:** Return valid MDX content as plain text, without JSON or extra wrappers.
 
-      
-      
-      ### 🎯 Important
-      Please generate the MDX file analysis and return it directly as plain text, without any JSON wrapping or additional formatting. The response should be valid MDX content, ready to use as-is.
+    ### 🎯 Important:
+    Generate the MDX file analysis directly as plain text, ready to use as-is.
 
       "`;
 
@@ -409,20 +407,17 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       let rawResponse = result.response.text();
       rawResponse = rawResponse.trim();
-      if (rawResponse.startsWith("```mdx")) {
-        console.log("Starts with mdx...");
-        rawResponse = rawResponse.slice(6); // remove "```mdx"
-        rawResponse = rawResponse.trimStart(); // remove newline if any
-        if (rawResponse.endsWith("```")) {
-          rawResponse = rawResponse.slice(0, -3); // remove trailing ```
-        }
-      } else if (rawResponse.startsWith("```json")) {
-        console.log("Starts with json...");
-        rawResponse = rawResponse.slice(7); // remove "```json"
-        rawResponse = rawResponse.trimStart(); // remove newline if any
-        if (rawResponse.endsWith("```")) {
-          rawResponse = rawResponse.slice(0, -3); // remove trailing ```
-        }
+      // Clean up response
+      if (
+        rawResponse.startsWith("```mdx") ||
+        rawResponse.startsWith("```json")
+      ) {
+        console.log("Inside rawResponse starts with ```mdx");
+        console.log("rawResponse is ", rawResponse);
+        rawResponse = rawResponse
+          .replace(/^```(mdx|json)\s*/, "")
+          .replace(/```$/, "")
+          .trim();
       }
 
       if (typeof rawResponse !== "string") {

@@ -19,19 +19,34 @@ router.get("/jobs", async (_req: Request, res: Response) => {
   }
 
   try {
-    // Get all keys that match BullMQ job patterns
-    const keys = await redisConnection.keys("bull:*");
-    console.log("keys is ", keys);
+    let cursor = "0";
+    let keys: string[] = [];
 
-    if (keys.length === 0) {
-      res.status(200).json({ message: "No jobs found to clean" });
-      return;
-    }
+    do {
+      // Scan for batches of keys matching the pattern
+      const [nextCursor, scanKeys] = await redisConnection.scan(
+        cursor,
+        "MATCH",
+        "bull:*",
+        "COUNT",
+        "100"
+      );
 
-    // Delete all BullMQ related keys
-    if (keys.length > 0) {
-      await redisConnection.del(...keys);
-    }
+      cursor = nextCursor;
+      keys = keys.concat(scanKeys);
+
+      // Delete keys in batches to avoid memory issues
+      if (scanKeys.length > 0) {
+        // Delete in smaller chunks to avoid Redis command length limits
+        const chunkSize = 100;
+        for (let i = 0; i < scanKeys.length; i += chunkSize) {
+          const chunk = scanKeys.slice(i, i + chunkSize);
+          await redisConnection.del(...chunk);
+        }
+      }
+    } while (cursor !== "0");
+
+    console.log("Total keys found and deleted:", keys.length);
 
     const queueNames = [
       QUEUES.DIRECTORY,
@@ -56,8 +71,7 @@ router.get("/jobs", async (_req: Request, res: Response) => {
       console.log("error.message is ", error.message);
     }
     res.status(500).json({
-      message: "Failed to clean jobs",
-      details: error instanceof Error ? error.message : String(error),
+      message: error instanceof Error ? error.message : String(error),
     });
   }
 });
