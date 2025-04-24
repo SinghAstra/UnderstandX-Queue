@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 
 import {
+  getAnalysisSetRedisKey,
   getAnalysisWorkerCompletedJobsRedisKey,
   getAnalysisWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
@@ -80,6 +81,16 @@ export const analysisWorker = new Worker(
   QUEUES.ANALYSIS,
   async (job) => {
     const { repositoryId, file } = job.data;
+    const analysisSetKey = getAnalysisSetRedisKey(repositoryId);
+    const isAlreadyProcessed = await redisClient.sismember(
+      analysisSetKey,
+      file.id
+    );
+    if (isAlreadyProcessed) {
+      console.log("🚫 Skipping duplicate analysis for:", file.path);
+      return;
+    }
+    await redisClient.sadd(analysisSetKey, file.id);
     const analysisWorkerCompletedJobsKey =
       getAnalysisWorkerCompletedJobsRedisKey(repositoryId);
 

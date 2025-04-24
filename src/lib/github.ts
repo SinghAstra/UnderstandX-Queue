@@ -2,14 +2,14 @@ import { Octokit } from "@octokit/rest";
 import { GitHubContent } from "../interfaces/github.js";
 import { sendProcessingUpdate } from "./pusher/send-update.js";
 
-const auth = process.env.GITHUB_ACCESS_TOKEN;
+const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN;
 
-if (!auth) {
+if (!GITHUB_ACCESS_TOKEN) {
   throw new Error("GITHUB_ACCESS_TOKEN is required.");
 }
 
 const octokit = new Octokit({
-  auth,
+  auth: GITHUB_ACCESS_TOKEN,
 });
 
 // This method :

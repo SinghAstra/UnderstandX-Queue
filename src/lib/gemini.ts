@@ -125,8 +125,10 @@ async function handleRequestExceeded() {
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
+  let times = 1;
+
   let rawResponse;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 10; i++) {
     try {
       const filePaths = new Set(files.map((file) => file.path));
 
@@ -212,8 +214,15 @@ export async function generateBatchSummaries(
         error instanceof Error &&
         error.message.includes("429 Too Many Requests")
       ) {
+        console.log(`Trying again for ${i} time --generateBatchSummaries`);
+        if (i > 5 && times < 5) {
+          console.log(`Reducing the value of i from ${i} to ${i - 5}`);
+          i = i - 5;
+          console.log(`Increasing times from ${times} to ${times + 1}`);
+          times = times + 1;
+        }
         await handleRequestExceeded();
-        sleep();
+        sleep(times);
         continue;
       }
 
@@ -226,16 +235,16 @@ export async function generateBatchSummaries(
         console.log(`Syntax Error occurred. Trying again for ${i} time`);
         console.log("--------------------------------");
         continue;
-      } else {
-        throw new Error(
-          "Could Not generate batch summaries, maybe ai model is down."
-        );
       }
+
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Unexpected error occurred while generating batch summary."
+      );
     }
   }
-  throw new Error(
-    "Could Not generate batch summaries, maybe ai model is down."
-  );
+  throw new Error(`Tried ${times} times but could not generate batch summary.`);
 }
 
 export async function generateRepositoryOverview(repositoryId: string) {

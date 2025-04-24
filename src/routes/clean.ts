@@ -6,7 +6,6 @@ import redisConnection from "../lib/redis.js";
 import { verifyCleanJobToken } from "../middleware/verify-clean-job-token.js";
 
 const router = Router();
-const NODE_ENV = process.env.NODE_ENV;
 
 router.get(
   "/jobs",

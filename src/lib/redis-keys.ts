@@ -22,6 +22,10 @@ export function getAnalysisWorkerCompletedJobsRedisKey(repositoryId: string) {
   return `${repositoryId}:analysisWorkerCompletedJobs`;
 }
 
+export function getAnalysisSetRedisKey(repositoryId: string) {
+  return `${repositoryId}:analysis:files`;
+}
+
 export function getGeminiRequestsThisMinuteRedisKey() {
   const now = Date.now();
   const currentMinute = Math.floor(now / 60000);
