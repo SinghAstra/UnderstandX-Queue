@@ -15,3 +15,7 @@ export const summaryQueue = new Queue(QUEUES.SUMMARY, {
 export const analysisQueue = new Queue(QUEUES.ANALYSIS, {
   connection,
 });
+
+export const logQueue = new Queue(QUEUES.LOG, {
+  connection,
+});

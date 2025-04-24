@@ -3,13 +3,12 @@ import { Worker } from "bullmq";
 import { QUEUES } from "../lib/constants.js";
 import { parseGithubUrl } from "../lib/github.js";
 import { prisma } from "../lib/prisma.js";
-import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   getDirectoryWorkerCompletedJobsRedisKey,
   getDirectoryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { directoryQueue } from "../queues/repository.js";
+import { directoryQueue, logQueue } from "../queues/repository.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
@@ -28,11 +27,6 @@ export const repositoryWorker = new Worker(
       if (!isValid || !owner) {
         throw new Error("Invalid GitHub URL");
       }
-
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.PROCESSING,
-        message: `📥 Downloading repository: ${repo}... `,
-      });
 
       await prisma.repository.update({
         where: { id: repositoryId },
@@ -65,10 +59,20 @@ export const repositoryWorker = new Worker(
         console.log("error.message is ", error.message);
       }
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.FAILED,
-        message: "⚠️ Oops! Something went wrong. Please try again later. ",
-      });
+      await logQueue.add(
+        QUEUES.LOG,
+        {
+          status: RepositoryStatus.FAILED,
+          message: "⚠️ Oops! Something went wrong. Please try again later. ",
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        }
+      );
 
       // Update status to failed
       await prisma.repository.update({
@@ -83,7 +87,7 @@ export const repositoryWorker = new Worker(
   }
 );
 
-repositoryWorker.on("failed", (job, error) => {
+repositoryWorker.on("failed", (error) => {
   if (error instanceof Error) {
     console.log("error.stack is ", error.stack);
     console.log("error.message is ", error.message);
@@ -91,7 +95,7 @@ repositoryWorker.on("failed", (job, error) => {
   console.log("Error occurred in repository worker");
 });
 
-repositoryWorker.on("completed", (job) => {
+repositoryWorker.on("completed", () => {
   console.log("Repository worker completed");
 });
 

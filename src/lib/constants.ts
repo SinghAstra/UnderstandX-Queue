@@ -3,6 +3,7 @@ export const QUEUES = {
   DIRECTORY: "directory-processing",
   SUMMARY: "summary-queue",
   ANALYSIS: "analysis-queue",
+  LOG: "log-queue",
 };
 
 export const FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION = 50;
