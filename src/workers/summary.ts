@@ -6,14 +6,13 @@ import {
   generateRepositoryOverview,
 } from "../lib/gemini.js";
 import { prisma } from "../lib/prisma.js";
-import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import {
   getAnalysisWorkerTotalJobsRedisKey,
   getSummaryWorkerCompletedJobsRedisKey,
   getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { analysisQueue } from "../queues/repository.js";
+import { analysisQueue, logQueue } from "../queues/repository.js";
 
 async function generateRepoOverview(repositoryId: string) {
   const summaryWorkerTotalJobsKey =
@@ -42,10 +41,20 @@ async function generateRepoOverview(repositoryId: string) {
     );
     console.log("-------------------------------------------------------");
 
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.PROCESSING,
-      message: "✅ All file summaries successfully generated!",
-    });
+    await logQueue.add(
+      QUEUES.LOG,
+      {
+        status: RepositoryStatus.PROCESSING,
+        message: "✅ All file summaries successfully generated!",
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+      }
+    );
 
     const repoOverview = await generateRepositoryOverview(repositoryId);
     await prisma.repository.update({
@@ -93,10 +102,20 @@ export const summaryWorker = new Worker(
       // Update progress
       await redisClient.incr(summaryWorkerCompletedJobsKey);
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.PROCESSING,
-        message: `🤔 Generating summary for files...`,
-      });
+      await logQueue.add(
+        QUEUES.LOG,
+        {
+          status: RepositoryStatus.PROCESSING,
+          message: `🤔 Generating summary for files...`,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        }
+      );
 
       return { status: "SUCCESS", processed: files.length };
     } catch (error) {
@@ -110,10 +129,20 @@ export const summaryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.FAILED,
-        message: `⚠️ Oops! We encountered an issue while generating summaries. Please try again later. `,
-      });
+      await logQueue.add(
+        QUEUES.LOG,
+        {
+          status: RepositoryStatus.FAILED,
+          message: `⚠️ Oops! We encountered an issue while generating summaries. Please try again later. `,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        }
+      );
     } finally {
       await generateRepoOverview(repositoryId);
     }

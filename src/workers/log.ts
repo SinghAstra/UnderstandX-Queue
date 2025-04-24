@@ -1,4 +1,5 @@
 import { Worker } from "bullmq";
+import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
@@ -9,17 +10,15 @@ export const logWorker = new Worker(
   async (job) => {
     const { repositoryId, message, status } = job.data;
 
-    await sendProcessingUpdate(repositoryId, {
-      status,
-      message,
-    });
-
-    await prisma.log.create({
+    const log = await prisma.log.create({
       data: {
         repositoryId,
         message,
+        status,
       },
     });
+
+    await sendProcessingUpdate(repositoryId, log);
   },
   {
     connection: redisClient,

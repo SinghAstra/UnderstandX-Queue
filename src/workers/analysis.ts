@@ -3,7 +3,6 @@ import { Worker } from "bullmq";
 import { QUEUES } from "../lib/constants.js";
 import { generateFileAnalysis } from "../lib/gemini.js";
 import { prisma } from "../lib/prisma.js";
-import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 
 import {
   getAnalysisSetRedisKey,
@@ -11,6 +10,7 @@ import {
   getAnalysisWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
+import { logQueue } from "../queues/repository.js";
 
 async function updateRepositoryStatus(repositoryId: string) {
   const analysisWorkerTotalJobsKey =
@@ -53,27 +53,56 @@ async function updateRepositoryStatus(repositoryId: string) {
     );
     console.log("-------------------------------------------------------");
 
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.PROCESSING,
-      message:
-        "🎉 Amazing! In-depth analysis completed for all files in your repository!",
-    });
+    await logQueue.add(
+      QUEUES.LOG,
+      {
+        status: RepositoryStatus.PROCESSING,
+        message:
+          "🎉 Amazing! In-depth analysis completed for all files in your repository!",
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+      }
+    );
 
     await prisma.repository.update({
       where: { id: repositoryId },
       data: { status: RepositoryStatus.SUCCESS },
     });
 
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.SUCCESS,
-      message:
-        "✨ Success! Your repository has been fully processed and is ready to explore!",
-    });
-
-    await sendProcessingUpdate(repositoryId, {
-      status: RepositoryStatus.SUCCESS,
-      message: "⏳ Almost there! Redirecting you in a few seconds...",
-    });
+    await logQueue.add(
+      QUEUES.LOG,
+      {
+        status: RepositoryStatus.PROCESSING,
+        message:
+          "✨ Success! Your repository has been fully processed and is ready to explore!",
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+      }
+    );
+    await logQueue.add(
+      QUEUES.LOG,
+      {
+        status: RepositoryStatus.PROCESSING,
+        message: "⏳ Almost there! Redirecting you in a few seconds...",
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+      }
+    );
   }
 }
 
@@ -109,10 +138,21 @@ export const analysisWorker = new Worker(
 
       console.log("Generated File Analysis for ", file.path);
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.PROCESSING,
-        message: `⚙️ Analyzing ${file.path}`,
-      });
+      await logQueue.add(
+        QUEUES.LOG,
+        {
+          status: RepositoryStatus.PROCESSING,
+          message: `⚙️ Analyzing ${file.path}`,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        }
+      );
+
       await redisClient.incr(analysisWorkerCompletedJobsKey);
     } catch (error) {
       if (error instanceof Error) {
@@ -129,10 +169,20 @@ export const analysisWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await sendProcessingUpdate(repositoryId, {
-        status: RepositoryStatus.FAILED,
-        message: `⚠️ Oops! failed to analyze ${file.path}. Please try again later. `,
-      });
+      await logQueue.add(
+        QUEUES.LOG,
+        {
+          status: RepositoryStatus.FAILED,
+          message: `⚠️ Oops! failed to analyze ${file.path}. Please try again later. `,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        }
+      );
     } finally {
       await updateRepositoryStatus(repositoryId);
     }

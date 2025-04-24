@@ -67,9 +67,9 @@ model Repository {
   githubId    Int
   status      RepositoryStatus @default(PENDING)
   overview    String?
-  logs        Log[]
   directories Directory[]
   files       File[]
+  logs        Log[]
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -96,20 +96,20 @@ model File {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   repositoryId String
-  analysis  String?
   shortSummary String?
+  analysis     String?
   directory    Directory? @relation(fields: [directoryId], references: [id], onDelete: Cascade)
   repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }
 
 model Log {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   repositoryId String
   message      String
-  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
+  status       RepositoryStatus
+  createdAt    DateTime         @default(now())
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }
-
 
 enum RepositoryStatus {
   PENDING
@@ -124,4 +124,3 @@ enum DirectoryStatus {
   SUCCESS
   FAILED
 }
-
