@@ -56,6 +56,7 @@ async function updateRepositoryStatus(repositoryId: string) {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message:
           "🎉 Amazing! In-depth analysis completed for all files in your repository!",
@@ -77,6 +78,7 @@ async function updateRepositoryStatus(repositoryId: string) {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message:
           "✨ Success! Your repository has been fully processed and is ready to explore!",
@@ -92,6 +94,7 @@ async function updateRepositoryStatus(repositoryId: string) {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: "⏳ Almost there! Redirecting you in a few seconds...",
       },
@@ -141,6 +144,7 @@ export const analysisWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.PROCESSING,
           message: `⚙️ Analyzing ${file.path}`,
         },
@@ -172,6 +176,7 @@ export const analysisWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.FAILED,
           message: `⚠️ Oops! failed to analyze ${file.path}. Please try again later. `,
         },

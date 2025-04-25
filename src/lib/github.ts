@@ -1,6 +1,8 @@
 import { Octokit } from "@octokit/rest";
+import { RepositoryStatus } from "@prisma/client";
 import { GitHubContent } from "../interfaces/github.js";
-import { sendProcessingUpdate } from "./pusher/send-update.js";
+import { logQueue } from "../queues/repository.js";
+import { QUEUES } from "./constants.js";
 
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN;
 
@@ -102,10 +104,21 @@ export async function fetchGithubContent(
           });
         }
 
-        await sendProcessingUpdate(repositoryId, {
-          status: "PROCESSING",
-          message: `📥 Downloading ${item.path}...`,
-        });
+        await logQueue.add(
+          QUEUES.LOG,
+          {
+            repositoryId,
+            status: RepositoryStatus.PROCESSING,
+            message: `📥 Downloading ${item.path}...`,
+          },
+          {
+            attempts: 3,
+            backoff: {
+              type: "exponential",
+              delay: 5000,
+            },
+          }
+        );
       } else if (item.type === "dir") {
         items.push({
           path: item.path,

@@ -1,5 +1,4 @@
 import { Worker } from "bullmq";
-import { v4 as uuid } from "uuid";
 import { QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
@@ -9,6 +8,8 @@ export const logWorker = new Worker(
   QUEUES.LOG,
   async (job) => {
     const { repositoryId, message, status } = job.data;
+
+    console.log("logWorker repositoryId is ", repositoryId);
 
     const log = await prisma.log.create({
       data: {

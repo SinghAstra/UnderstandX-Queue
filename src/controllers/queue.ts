@@ -13,6 +13,7 @@ export const addJobToRepositoryQueue = async (req: Request, res: Response) => {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: `📥 Downloading repository: ${repo}... `,
       },

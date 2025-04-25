@@ -62,6 +62,7 @@ export const repositoryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.FAILED,
           message: "⚠️ Oops! Something went wrong. Please try again later. ",
         },

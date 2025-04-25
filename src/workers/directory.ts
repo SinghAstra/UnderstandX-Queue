@@ -55,6 +55,7 @@ async function startSummaryWorker(repositoryId: string) {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: "🤔 Studying files to create summaries...",
       },
@@ -117,6 +118,7 @@ export const directoryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.PROCESSING,
           message: `📂 Downloading the ${dirName} directory...`,
         },
@@ -176,6 +178,7 @@ export const directoryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.PROCESSING,
           message: `✅ Finished downloading the ${dirName} directory`,
         },
@@ -205,6 +208,7 @@ export const directoryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.FAILED,
           message: `⚠️ Oops! We couldn't process the ${dirName} directory. Please try again later. `,
         },
@@ -241,6 +245,7 @@ async function processFilesInBatches(
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: `📄 Downloading ${fileCount} ${
           fileCount === 1 ? "file" : "files"
@@ -292,6 +297,7 @@ async function processFilesInBatches(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.PROCESSING,
           message: `⏳ Saving files in ${dirName}: ${progress}% complete`,
         },
@@ -308,6 +314,7 @@ async function processFilesInBatches(
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: `🎉 Successfully downloaded  ${files.length} ${
           files.length === 1 ? "file" : "files"
@@ -330,6 +337,7 @@ async function processFilesInBatches(
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: `⚠️ Oops! Something went wrong in ${dirName}. Please try again later. `,
       },

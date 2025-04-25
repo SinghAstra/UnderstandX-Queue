@@ -44,6 +44,7 @@ async function generateRepoOverview(repositoryId: string) {
     await logQueue.add(
       QUEUES.LOG,
       {
+        repositoryId,
         status: RepositoryStatus.PROCESSING,
         message: "✅ All file summaries successfully generated!",
       },
@@ -105,6 +106,7 @@ export const summaryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.PROCESSING,
           message: `🤔 Generating summary for files...`,
         },
@@ -132,6 +134,7 @@ export const summaryWorker = new Worker(
       await logQueue.add(
         QUEUES.LOG,
         {
+          repositoryId,
           status: RepositoryStatus.FAILED,
           message: `⚠️ Oops! We encountered an issue while generating summaries. Please try again later. `,
         },
