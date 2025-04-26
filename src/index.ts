@@ -12,9 +12,9 @@ app.use("/api/queue", queueRoutes);
 app.use("/api/clean", cleanRoutes);
 
 app.get("/", (req: Request, res: Response) => {
-  res.status(200).json({ message: "Server is up" });
+  res.status(200).json({ message: "Service is up" });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is listening on http://localhost:${PORT}`);
+  console.log(`Service is listening on http://localhost:${PORT}`);
 });
