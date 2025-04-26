@@ -16,7 +16,6 @@ import {
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
 import {
-  criticalLogQueue,
   directoryQueue,
   logQueue,
   summaryQueue,
@@ -206,8 +205,8 @@ export const directoryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await criticalLogQueue.add(
-        QUEUES.CRITICAL_LOG,
+      await logQueue.add(
+        QUEUES.LOG,
         {
           repositoryId,
           status: RepositoryStatus.FAILED,

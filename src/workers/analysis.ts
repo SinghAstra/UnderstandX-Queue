@@ -10,7 +10,7 @@ import {
   getAnalysisWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { criticalLogQueue, logQueue } from "../queues/repository.js";
+import { logQueue } from "../queues/repository.js";
 
 async function updateRepositoryStatus(repositoryId: string) {
   const analysisWorkerTotalJobsKey =
@@ -53,8 +53,8 @@ async function updateRepositoryStatus(repositoryId: string) {
     );
     console.log("-------------------------------------------------------");
 
-    await criticalLogQueue.add(
-      QUEUES.CRITICAL_LOG,
+    await logQueue.add(
+      QUEUES.LOG,
       {
         repositoryId,
         status: RepositoryStatus.PROCESSING,
@@ -75,8 +75,8 @@ async function updateRepositoryStatus(repositoryId: string) {
       data: { status: RepositoryStatus.SUCCESS },
     });
 
-    await criticalLogQueue.add(
-      QUEUES.CRITICAL_LOG,
+    await logQueue.add(
+      QUEUES.LOG,
       {
         repositoryId,
         status: RepositoryStatus.SUCCESS,
@@ -91,7 +91,7 @@ async function updateRepositoryStatus(repositoryId: string) {
         },
       }
     );
-    await criticalLogQueue.add(
+    await logQueue.add(
       QUEUES.CRITICAL_LOG,
       {
         repositoryId,
@@ -173,8 +173,8 @@ export const analysisWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await criticalLogQueue.add(
-        QUEUES.CRITICAL_LOG,
+      await logQueue.add(
+        QUEUES.LOG,
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
