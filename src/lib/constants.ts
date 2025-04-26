@@ -4,6 +4,7 @@ export const QUEUES = {
   SUMMARY: "summary-queue",
   ANALYSIS: "analysis-queue",
   LOG: "log-queue",
+  CRITICAL_LOG: "critical-log-queue",
 };
 
 export const FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION = 50;

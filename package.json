@@ -40,8 +40,9 @@
     "dev:worker3": "node dist/workers/summary.js --id=3",
     "dev:worker4": "node dist/workers/analysis.js --id=4",
     "dev:worker5": "node dist/workers/log.js --id=5",
+    "dev:worker6": "node dist/workers/critical-log.js --id=5",
     "dev:server": "node dist/index.js",
-    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\" \"npm run dev:worker4\"  \"npm run dev:worker5\""
+    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\" \"npm run dev:worker4\"  \"npm run dev:worker5\" \"npm run dev:worker6\""
   },
   "keywords": [],
   "author": "",

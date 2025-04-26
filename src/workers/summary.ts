@@ -12,7 +12,11 @@ import {
   getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { analysisQueue, logQueue } from "../queues/repository.js";
+import {
+  analysisQueue,
+  criticalLogQueue,
+  logQueue,
+} from "../queues/repository.js";
 
 async function generateRepoOverview(repositoryId: string) {
   const summaryWorkerTotalJobsKey =
@@ -131,8 +135,8 @@ export const summaryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await logQueue.add(
-        QUEUES.LOG,
+      await criticalLogQueue.add(
+        QUEUES.CRITICAL_LOG,
         {
           repositoryId,
           status: RepositoryStatus.FAILED,

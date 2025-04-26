@@ -8,7 +8,11 @@ import {
   getDirectoryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { directoryQueue, logQueue } from "../queues/repository.js";
+import {
+  criticalLogQueue,
+  directoryQueue,
+  logQueue,
+} from "../queues/repository.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
@@ -59,8 +63,8 @@ export const repositoryWorker = new Worker(
         console.log("error.message is ", error.message);
       }
 
-      await logQueue.add(
-        QUEUES.LOG,
+      await criticalLogQueue.add(
+        QUEUES.CRITICAL_LOG,
         {
           repositoryId,
           status: RepositoryStatus.FAILED,

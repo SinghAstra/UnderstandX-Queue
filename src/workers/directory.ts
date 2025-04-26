@@ -16,6 +16,7 @@ import {
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
 import {
+  criticalLogQueue,
   directoryQueue,
   logQueue,
   summaryQueue,
@@ -205,8 +206,8 @@ export const directoryWorker = new Worker(
         data: { status: RepositoryStatus.FAILED },
       });
 
-      await logQueue.add(
-        QUEUES.LOG,
+      await criticalLogQueue.add(
+        QUEUES.CRITICAL_LOG,
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
@@ -333,22 +334,6 @@ async function processFilesInBatches(
       console.log("error.stack is ", error.stack);
       console.log("error.message is ", error.message);
     }
-
-    await logQueue.add(
-      QUEUES.LOG,
-      {
-        repositoryId,
-        status: RepositoryStatus.PROCESSING,
-        message: `⚠️ Oops! Something went wrong in ${dirName}. Please try again later. `,
-      },
-      {
-        attempts: 3,
-        backoff: {
-          type: "exponential",
-          delay: 5000,
-        },
-      }
-    );
 
     throw error;
   }

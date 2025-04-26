@@ -19,3 +19,7 @@ export const analysisQueue = new Queue(QUEUES.ANALYSIS, {
 export const logQueue = new Queue(QUEUES.LOG, {
   connection,
 });
+
+export const criticalLogQueue = new Queue(QUEUES.CRITICAL_LOG, {
+  connection,
+});
