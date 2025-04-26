@@ -20,9 +20,6 @@ const redisClient = new Redis(REDIS_URL, {
     // reconnect after
     return Math.min(times * 600, 6000);
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
 });
 
 redisClient.on("error", (error) => {
