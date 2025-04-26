@@ -35,6 +35,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
+    "postinstall": "prisma generate",
     "dev:worker1": "node dist/workers/repository.js --id=1",
     "dev:worker2": "node dist/workers/directory.js --id=2",
     "dev:worker3": "node dist/workers/summary.js --id=3",
@@ -54,7 +55,7 @@
     "@types/node": "^22.13.4",
     "concurrently": "^9.1.2",
     "nodemon": "^3.1.9",
-    "prisma": "^6.3.1",
+    "prisma": "^6.6.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
