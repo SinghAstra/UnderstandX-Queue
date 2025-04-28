@@ -1,6 +1,6 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { QUEUES } from "../lib/constants.js";
+import { ANALYSIS_WORKERS, QUEUES } from "../lib/constants.js";
 import { generateFileAnalysis } from "../lib/gemini.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -197,7 +197,7 @@ export const analysisWorker = new Worker(
   },
   {
     connection: redisClient,
-    concurrency: 5,
+    concurrency: ANALYSIS_WORKERS,
   }
 );
 

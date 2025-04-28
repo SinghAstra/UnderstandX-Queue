@@ -162,7 +162,7 @@ export const directoryWorker = new Worker(
       // Queue subdirectories for processing
       await Promise.all(
         directories.map(async (dir) => {
-          await directoryQueue.add("process-directory", {
+          await directoryQueue.add(QUEUES.DIRECTORY, {
             owner,
             repo,
             repositoryId,

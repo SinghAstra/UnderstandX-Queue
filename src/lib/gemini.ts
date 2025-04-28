@@ -81,8 +81,7 @@ export async function checkLimits() {
   };
 }
 
-async function sleep(i?: number) {
-  const times = i || 1;
+async function sleep(times: number) {
   console.log(`Sleeping for ${2 * times} seconds...`);
   await new Promise((resolve) => setTimeout(resolve, 2000 * times));
 }
@@ -104,7 +103,7 @@ export async function handleRateLimit(tokenCount: number) {
   const { requestsExceeded, tokensExceeded } = limitsResponse;
 
   if (requestsExceeded || tokensExceeded) {
-    await sleep();
+    await sleep(1);
   }
 
   await trackRequest(tokenCount);
@@ -123,10 +122,8 @@ async function handleRequestExceeded() {
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
-  let times = 1;
-
   let rawResponse;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     try {
       const filePaths = new Set(files.map((file) => file.path));
 
@@ -213,14 +210,8 @@ export async function generateBatchSummaries(
         error.message.includes("429 Too Many Requests")
       ) {
         console.log(`Trying again for ${i} time --generateBatchSummaries`);
-        if (i > 5 && times < 5) {
-          console.log(`Reducing the value of i from ${i} to ${i - 5}`);
-          i = i - 5;
-          console.log(`Increasing times from ${times} to ${times + 1}`);
-          times = times + 1;
-        }
         await handleRequestExceeded();
-        sleep(times);
+        sleep(i + 1);
         continue;
       }
 
@@ -242,11 +233,11 @@ export async function generateBatchSummaries(
       );
     }
   }
-  throw new Error(`Tried ${times} times but could not generate batch summary.`);
+  throw new Error(`Could not generate batch summary.`);
 }
 
 export async function generateRepositoryOverview(repositoryId: string) {
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 20; i++) {
     try {
       // Fetch all file paths and summaries
       const files = await prisma.file.findMany({
@@ -315,20 +306,17 @@ export async function generateRepositoryOverview(repositoryId: string) {
         error.message.includes("429 Too Many Requests")
       ) {
         await handleRequestExceeded();
-        sleep();
+        sleep(i);
         continue;
       }
 
-      throw new Error(
-        "Could Not generate Repository overview, maybe ai model is down."
-      );
+      throw new Error("Could Not generate Repository overview.");
     }
   }
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  let times = 1;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -454,15 +442,8 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
         console.log("file.path is ", file.path);
         console.log(`Trying again for ${i} time`);
-
-        if (i > 5 && times < 5) {
-          console.log(`Reducing the value of i from ${i} to ${i - 5}`);
-          i = i - 5;
-          console.log(`Increasing times from ${times} to ${times + 1}`);
-          times = times + 1;
-        }
         await handleRequestExceeded();
-        sleep(times);
+        sleep(i + 1);
         console.log("--------------------------------");
         continue;
       }
@@ -487,7 +468,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
     }
   }
 
-  throw new Error(`Tried ${times} times but could not generate file analysis.`);
+  throw new Error(`Could not generate file analysis.`);
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {

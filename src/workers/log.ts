@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { QUEUES } from "../lib/constants.js";
+import { CONCURRENT_WORKERS, QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import redisClient from "../lib/redis.js";
@@ -23,6 +23,6 @@ export const logWorker = new Worker(
   },
   {
     connection: redisClient,
-    concurrency: 5,
+    concurrency: CONCURRENT_WORKERS,
   }
 );
