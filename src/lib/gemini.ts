@@ -1,8 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { File } from "@prisma/client";
-import { error } from "console";
 import dotenv from "dotenv";
-import { response } from "express";
 import { prisma } from "./prisma.js";
 import {
   getGeminiRequestsThisMinuteRedisKey,
