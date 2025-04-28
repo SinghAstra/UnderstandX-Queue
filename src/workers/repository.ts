@@ -8,7 +8,7 @@ import {
   getDirectoryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { directoryQueue, logQueue } from "../queues/repository.js";
+import { directoryQueue, logQueue } from "../queues/index.js";
 
 export const repositoryWorker = new Worker(
   QUEUES.REPOSITORY,
@@ -64,7 +64,10 @@ export const repositoryWorker = new Worker(
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
-          message: "⚠️ Oops! Something went wrong. Please try again later. ",
+          message:
+            error instanceof Error
+              ? `⚠️ ${error.message}`
+              : "⚠️ Oops! Something went wrong. Please try again later. ",
         },
         {
           attempts: 3,

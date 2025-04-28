@@ -10,7 +10,7 @@ import {
   getAnalysisWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import { logQueue } from "../queues/repository.js";
+import { logQueue } from "../queues/index.js";
 
 async function updateRepositoryStatus(repositoryId: string) {
   const analysisWorkerTotalJobsKey =

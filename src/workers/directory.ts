@@ -15,11 +15,7 @@ import {
   getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
-import {
-  directoryQueue,
-  logQueue,
-  summaryQueue,
-} from "../queues/repository.js";
+import { directoryQueue, logQueue, summaryQueue } from "../queues/index.js";
 
 let dirPath: string;
 

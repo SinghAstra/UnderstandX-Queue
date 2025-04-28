@@ -5,7 +5,7 @@ interface AuthPayload {
   userId: string;
 }
 
-export function verifyCleanJobToken(
+export default function verifyCleanJobToken(
   req: Request,
   res: Response,
   next: NextFunction
