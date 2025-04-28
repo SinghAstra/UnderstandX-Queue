@@ -207,9 +207,10 @@ export async function generateBatchSummaries(
 
       if (
         error instanceof Error &&
-        error.message.includes("429 Too Many Requests")
+        (error.message.includes("429 Too Many Requests") ||
+          error.message.includes("503 Service Unavailable"))
       ) {
-        console.log(`Trying again for ${i} time --generateBatchSummaries`);
+        console.log(`Trying again for ${i + 1} time --generateBatchSummaries`);
         await handleRequestExceeded();
         sleep(i + 1);
         continue;
@@ -303,10 +304,14 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
       if (
         error instanceof Error &&
-        error.message.includes("429 Too Many Requests")
+        (error.message.includes("429 Too Many Requests") ||
+          error.message.includes("503 Service Unavailable"))
       ) {
+        console.log(
+          `Trying again for ${i + 1} time --generateRepositoryOverview`
+        );
         await handleRequestExceeded();
-        sleep(i);
+        sleep(i + 1);
         continue;
       }
 
@@ -433,21 +438,14 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       if (
         error instanceof Error &&
-        error.message.includes("429 Too Many Requests")
+        (error.message.includes("429 Too Many Requests") ||
+          error.message.includes("503 Service Unavailable"))
       ) {
-        console.log("--------------------------------");
-        console.log(
-          'In generateFileAnalysis catch block if(error.message.includes("429 Too Many Requests")'
-        );
-
-        console.log("file.path is ", file.path);
-        console.log(`Trying again for ${i} time`);
+        console.log(`Trying again for ${i + 1} time --generateFileAnalysis`);
         await handleRequestExceeded();
         sleep(i + 1);
-        console.log("--------------------------------");
         continue;
       }
-
       if (
         error instanceof Error &&
         error.message.includes("rawResponse is not a string")
