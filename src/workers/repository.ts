@@ -1,6 +1,6 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { QUEUES } from "../lib/constants.js";
+import { CONCURRENT_WORKERS, QUEUES } from "../lib/constants.js";
 import { parseGithubUrl } from "../lib/github.js";
 import { prisma } from "../lib/prisma.js";
 import {
@@ -87,7 +87,7 @@ export const repositoryWorker = new Worker(
   },
   {
     connection: redisClient,
-    concurrency: 5,
+    concurrency: CONCURRENT_WORKERS,
   }
 );
 

@@ -92,7 +92,7 @@ async function updateRepositoryStatus(repositoryId: string) {
       }
     );
     await logQueue.add(
-      QUEUES.CRITICAL_LOG,
+      QUEUES.LOG,
       {
         repositoryId,
         status: RepositoryStatus.PROCESSING,
@@ -178,7 +178,10 @@ export const analysisWorker = new Worker(
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
-          message: `⚠️ Oops! failed to analyze ${file.path}. Please try again later. `,
+          message:
+            error instanceof Error
+              ? `⚠️ ${error.message}`
+              : "⚠️ Oops! Something went wrong. Please try again later. ",
         },
         {
           attempts: 3,

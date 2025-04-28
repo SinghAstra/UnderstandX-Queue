@@ -136,7 +136,10 @@ export const summaryWorker = new Worker(
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
-          message: `⚠️ Oops! We encountered an issue while generating summaries. Please try again later. `,
+          message:
+            error instanceof Error
+              ? `⚠️ ${error.message}`
+              : "⚠️ Oops! Something went wrong. Please try again later. ",
         },
         {
           attempts: 3,

@@ -2,7 +2,7 @@ import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
 import { GitHubContent } from "../interfaces/github.js";
 import {
-  CONCURRENT_PROCESSING,
+  CONCURRENT_WORKERS,
   FILE_BATCH_SIZE_FOR_AI_SHORT_SUMMARY,
   FILE_BATCH_SIZE_FOR_PRISMA_TRANSACTION,
   QUEUES,
@@ -206,7 +206,10 @@ export const directoryWorker = new Worker(
         {
           repositoryId,
           status: RepositoryStatus.FAILED,
-          message: `⚠️ Oops! We couldn't process the ${dirName} directory. Please try again later. `,
+          message:
+            error instanceof Error
+              ? `⚠️ ${error.message}`
+              : "⚠️ Oops! Something went wrong. Please try again later. ",
         },
         {
           attempts: 3,
@@ -223,7 +226,7 @@ export const directoryWorker = new Worker(
   },
   {
     connection: redisClient,
-    concurrency: CONCURRENT_PROCESSING,
+    concurrency: CONCURRENT_WORKERS,
   }
 );
 
