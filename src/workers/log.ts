@@ -24,6 +24,12 @@ export const logWorker = new Worker(
     await sendProcessingUpdate(repositoryId, log);
 
     if (status === RepositoryStatus.FAILED) {
+      console.log("--------------------------------------------------------");
+      console.log(
+        "logWorker status is FAILED, cancelling all jobs for repositoryId: ",
+        repositoryId
+      );
+      console.log("--------------------------------------------------------");
       await cancelAllRepositoryJobs(repositoryId);
     }
   },

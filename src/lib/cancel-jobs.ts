@@ -38,6 +38,10 @@ export async function cancelAllRepositoryJobs(repositoryId: string) {
     "active",
     "delayed",
   ]);
+  console.log("--------------------------------------------------------");
+  console.log("In cancel-jobs");
+  console.log("analysisJobs.length is ", analysisJobs.length);
+  console.log("--------------------------------------------------------");
   for (const job of analysisJobs) {
     if (job.data.repositoryId === repositoryId) {
       await job.remove();

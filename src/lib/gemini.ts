@@ -319,7 +319,7 @@ export async function generateRepositoryOverview(repositoryId: string) {
 }
 
 export async function generateFileAnalysis(repositoryId: string, file: File) {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 100; i++) {
     try {
       const repository = await prisma.repository.findFirst({
         where: {
@@ -463,7 +463,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
     }
   }
 
-  throw new Error(`Could not generate file analysis.`);
+  throw new Error(`Could not generate file analysis for ${file.path}.`);
 }
 
 function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
