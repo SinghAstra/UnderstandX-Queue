@@ -1,4 +1,6 @@
+import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
+import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { CONCURRENT_WORKERS, QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
@@ -20,6 +22,10 @@ export const logWorker = new Worker(
     });
 
     await sendProcessingUpdate(repositoryId, log);
+
+    if (status === RepositoryStatus.FAILED) {
+      await cancelAllRepositoryJobs(repositoryId);
+    }
   },
   {
     connection: redisClient,

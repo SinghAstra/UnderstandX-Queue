@@ -207,8 +207,7 @@ export async function generateBatchSummaries(
 
       if (
         error instanceof Error &&
-        (error.message.includes("429 Too Many Requests") ||
-          error.message.includes("503 Service Unavailable"))
+        error.message.includes("GoogleGenerativeAI Error")
       ) {
         console.log(`Trying again for ${i + 1} time --generateBatchSummaries`);
         await handleRequestExceeded();
@@ -304,8 +303,7 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
       if (
         error instanceof Error &&
-        (error.message.includes("429 Too Many Requests") ||
-          error.message.includes("503 Service Unavailable"))
+        error.message.includes("GoogleGenerativeAI Error")
       ) {
         console.log(
           `Trying again for ${i + 1} time --generateRepositoryOverview`
@@ -438,8 +436,7 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
 
       if (
         error instanceof Error &&
-        (error.message.includes("429 Too Many Requests") ||
-          error.message.includes("503 Service Unavailable"))
+        error.message.includes("GoogleGenerativeAI Error")
       ) {
         console.log(`Trying again for ${i + 1} time --generateFileAnalysis`);
         await handleRequestExceeded();
