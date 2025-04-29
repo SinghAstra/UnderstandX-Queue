@@ -10,6 +10,15 @@ export default function verifyCleanJobToken(
   res: Response,
   next: NextFunction
 ): void {
+  console.log(
+    "----------------------------------------------------------------------------"
+  );
+  console.log(
+    "----------------------------------------------------------------------------"
+  );
+  console.log(
+    "----------------------------------------------------------------------------"
+  );
   console.log("verifyCleanJobToken called");
   const authHeader = req.headers.authorization;
   console.log("authHeader is ", authHeader);
@@ -26,11 +35,23 @@ export default function verifyCleanJobToken(
   }
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.SERVICE_JWT_SECRET
-    ) as AuthPayload;
+    const decoded = jwt.verify(token, process.env.SERVICE_JWT_SECRET);
+
+    console.log("decoded is ", decoded);
+
     req.body.auth = decoded;
+
+    console.log("req.body.auth in verify-clean-job-token  is ", req.body.auth);
+    console.log(
+      "----------------------------------------------------------------------------"
+    );
+    console.log(
+      "----------------------------------------------------------------------------"
+    );
+    console.log(
+      "----------------------------------------------------------------------------"
+    );
+
     next();
   } catch (error) {
     res.status(401).json({ message: "Invalid or expired token" });

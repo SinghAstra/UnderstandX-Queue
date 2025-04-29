@@ -1,10 +1,11 @@
 import "dotenv/config";
 import { Router } from "express";
-import { cleanJobs } from "../controllers/clean.js";
+import { cleanJobs, cleanUserJobs } from "../controllers/clean.js";
 import verifyCleanJobToken from "../middleware/verify-clean-job-token.js";
 
 const router = Router();
 
-router.get("/jobs", verifyCleanJobToken, cleanJobs);
+router.get("/jobs", cleanJobs);
+router.get("/user-jobs", verifyCleanJobToken, cleanUserJobs);
 
 export default router;
