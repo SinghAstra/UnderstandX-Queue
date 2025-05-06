@@ -2,7 +2,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { File } from "@prisma/client";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
-import { generateBatchSummarySystemPrompt } from "./prompt.js";
+import {
+  generateBatchSummarySystemPrompt,
+  generateFileAnalysisSystemPrompt,
+  generateOverviewSystemPrompt,
+} from "./prompt.js";
 import {
   getGeminiRequestsThisMinuteRedisKey,
   getGeminiTokensConsumedThisMinuteRedisKey,
@@ -116,6 +120,7 @@ async function handleRequestExceeded() {
   console.log("limitsResponse:", limitsResponse);
   console.log("-------------------------------");
 }
+
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
@@ -143,6 +148,7 @@ export async function generateBatchSummaries(
         model,
         contents: prompt,
         config: {
+          temperature: 0.1,
           systemInstruction: generateBatchSummarySystemPrompt,
           responseMimeType: "application/json",
           responseSchema: {
@@ -245,42 +251,39 @@ export async function generateRepositoryOverview(repositoryId: string) {
         )
         .join("\n");
 
-      const prompt = `
-      You are a coding assistant.
-      Your task is to generate a **structured MDX project overview** based on the provided file summaries.
-
+      const userPrompt = `
       ## 📦 Project Overview Structure:
-      1. **Introduction:** 🎯 What Problem does this repository solve ? What is the Technology Stack ? 
-      2. **Key Features:** 🌟 State the project's core functionalities, referencing relevant files where appropriate.
-      3. **Data Flow:** 🔄  explain how data flows through the system.
-      4. **Conclusion:** ✅ Provide a final summary tying the features and architecture together.
+
+      1.  **Introduction:** 🎯 What Problem does this repository solve? What is the Technology Stack?
+      2.  **Key Features:** 🌟 State the project's core functionalities, referencing relevant files where appropriate.
+      3.  **Data Flow:** 🔄 Explain how data flows through the system.
+      4.  **Conclusion:** ✅ Provide a final summary tying the features and architecture together.
 
       ## 🛠️ File Summaries:
+
       ${fileSummaries}
 
-      ## 🚀 Guidelines:
-      - **MDX format:** Use proper heading levels (#, ##, ###).
-      - **Inline code:** Use backticks for code snippets (e.g., \`exampleFunction()\`).
-      - **Lists:** Use \`-\` for bullet points, \`1.\` for numbered lists.
-      - **Emojis:** Add relevant emojis to make the overview engaging add emoji before the heading text.
-      - **No code block wrappers:** Do **not** use triple backticks for MDX content.
-      - **Be concise yet insightful.** Don’t over-explain — aim for clarity.
-
-      ## 🎯 Important:
-      - Ensure the output is **valid MDX**.
-      - The overview should **reference key files** from the provided summaries when relevant.
-      - **Directly output MDX content** without wrapping it in code blocks.
-
-      Please generate the MDX project overview as plain text.
+      Generate the MDX project overview.
       `;
 
-      const tokenCount = await estimateTokenCount(prompt);
+      const tokenCount = await estimateTokenCount(userPrompt);
 
       await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent(prompt);
+      const response = await ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+          temperature: 0.1,
+          systemInstruction: generateOverviewSystemPrompt,
+        },
+      });
 
-      const repositoryOverview = result.response.text();
+      const repositoryOverview = response.text;
+
+      if (!response || !response.text) {
+        throw new Error("Invalid batch summary response format");
+      }
 
       console.log("repositoryOverview is ", repositoryOverview);
 
@@ -335,67 +338,73 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         )
         .join("\n");
 
-      const prompt = `
-      "You are a coding assistant.
-      Your task is to generate a **structured MDX File Analysis Blog** based on
-      the provided repository overview 
-      short summaries of all files in the repo, and 
-      file Content to analyze. 
+      const userPrompt = `
+        Generate a **structured MDX File Analysis Blog** based on the provided repository overview, short summaries of all files in the repo, and the content of the file to analyze.
+        
+        ## Repository Overview:
+        ${
+          repository.overview ||
+          "No overview provided—make reasonable guesses based on file paths and content."
+        }
+        
+        ## File Summaries:
+        ${
+          fileSummaries ||
+          "No summaries available—use file paths and content to infer roles."
+        }
+        
+        ## File to Analyze:
+        ${
+          file.content ||
+          "No content available—analyze based on path and repo context."
+        }
+        
+        ## 🚀 Guidelines:
+        
+        *   **MDX format:** Use proper heading levels (#, ##, ###).
+        *   **Inline code:** Wrap code snippets in single backticks (e.g., \`exampleFunction()\`).
+        *   **Multi-line code:** Use triple backticks with language identifier (e.g., \`\`\`tsx\\n// your code here\\n\`\`\`).
+        *   **Lists:** Use \`-\` for bullets, \`1.\` for numbered lists.
+        *   **Emojis:** Add relevant emojis before headings for engagement.
+        *   **Beginner-friendly:** Briefly define technical terms.
+        
+        **Analysis Structure:**
+        
+        1.  **📝 Introduction:**
+            *   Describe the file’s role within the project.
+            *   Explain what this file does in the project.
+            *   Highlight how it connects to the application’s flow.
+        2.  **🧩 Code Breakdown by Sections:**
+            *   Divide the file into logical sections and describe what each section does in simple, plain English.
+            *   Suggest improvements for each section (refactoring, bug fixes, etc.).
+        3.  **📜 Key Code:**
+            *   Briefly explain code that supports the main logic.
+            *   Identify potential issues or areas for optimization.
+        4.  **Possible improvements:**
+            *   List any possible improvements to the code.
+        5.  **🔁 Quick Recap:**
+            *   📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.
+        
+        ### 🎯 Important: Generate the MDX file analysis directly as plain text, ready to use as-is.
+        `;
 
-
-      📝 Introduction:  
-      -   describe the file’s role within the project.  
-      -   Explain what this file does in the project.  
-      -   Highlight how it connects to the application’s flow.  
-
-      🧩 Code Breakdown by Sections:  
-      -  Divide the file into logical sections and describe what each section does in simple , plain english language.
-
-
-      📜 Key Code:  
-      -  Briefly explain code that support the main logic. 
-
-      🔁 Quick Recap:  
-      - 📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.  
-
-      ## Repository Overview:
-      ${
-        repository.overview ||
-        "No overview provided—make reasonable guesses based on file paths and content."
-      }
-
-      ## File Summaries:
-      ${
-        fileSummaries ||
-        "No summaries available—use file paths and content to infer roles."
-      }
-
-      ##  File to Analyze:
-      ${
-        file.content ||
-        "No content available—analyze based on path and repo context."
-      }
-
-     ## 🚀 Guidelines:
-    - **MDX format:** Use proper heading levels (#, ##, ###).
-    - **Inline code:** Wrap code snippets in single backticks (e.g., \`exampleFunction()\`).
-    - **Multi-line code:** Use triple backticks with language identifier (e.g., \`\`\`tsx\n// your code here\n\`\`\`).
-    - **Lists:** Use \`-\` for bullets, \`1.\` for numbered lists.
-    - **Emojis:** Add relevant emojis before headings for engagement.
-    - **Beginner-friendly:** Briefly define technical terms.
-    - **Output:** Return valid MDX content as plain text, without JSON or extra wrappers.
-
-    ### 🎯 Important:
-    Generate the MDX file analysis directly as plain text, ready to use as-is.
-
-      "`;
-
-      const tokenCount = await estimateTokenCount(prompt);
+      const tokenCount = await estimateTokenCount(userPrompt);
       await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent(prompt);
+      const response = await ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+          temperature: 0.2,
+          systemInstruction: generateFileAnalysisSystemPrompt,
+        },
+      });
 
-      let rawResponse = result.response.text();
+      const repositoryOverview = response.text;
+
+      console.log("repositoryOverview is ", repositoryOverview);
+
+      let rawResponse = response.text;
       rawResponse = rawResponse.trim();
       // Clean up response
       if (
