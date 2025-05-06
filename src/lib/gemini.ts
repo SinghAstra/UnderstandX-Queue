@@ -281,11 +281,11 @@ export async function generateRepositoryOverview(repositoryId: string) {
 
       const repositoryOverview = response.text;
 
-      if (!response || !response.text) {
-        throw new Error("Invalid batch summary response format");
-      }
-
       console.log("repositoryOverview is ", repositoryOverview);
+
+      if (!response || !response.text) {
+        throw new Error("Invalid repository overview format");
+      }
 
       return repositoryOverview;
     } catch (error) {
@@ -304,6 +304,17 @@ export async function generateRepositoryOverview(repositoryId: string) {
           `Trying again for ${i + 1} time --generateRepositoryOverview`
         );
         await handleRequestExceeded();
+        sleep(i + 1);
+        continue;
+      }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("Invalid repository overview format")
+      ) {
+        console.log(
+          `Trying again for ${i + 1} time --generateRepositoryOverview`
+        );
         sleep(i + 1);
         continue;
       }
@@ -400,30 +411,25 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         },
       });
 
-      const repositoryOverview = response.text;
+      console.log("response is ", response);
 
-      console.log("repositoryOverview is ", repositoryOverview);
+      if (!response || !response.text) {
+        throw new Error("Invalid file analysis format");
+      }
 
-      let rawResponse = response.text;
-      rawResponse = rawResponse.trim();
+      let fileAnalysis = response.text;
+
+      fileAnalysis = fileAnalysis.trim();
       // Clean up response
-      if (
-        rawResponse.startsWith("```mdx") ||
-        rawResponse.startsWith("```json")
-      ) {
-        console.log("Inside rawResponse starts with ```mdx");
-        console.log("rawResponse is ", rawResponse);
-        rawResponse = rawResponse
-          .replace(/^```(mdx|json)\s*/, "")
+      if (fileAnalysis.startsWith("```mdx")) {
+        console.log("Inside fileAnalysis starts with ```mdx");
+        fileAnalysis = fileAnalysis
+          .replace(/^```(mdx)\s*/, "")
           .replace(/```$/, "")
           .trim();
       }
 
-      if (typeof rawResponse !== "string") {
-        throw new Error("rawResponse is not a string");
-      }
-
-      return rawResponse;
+      return fileAnalysis;
     } catch (error) {
       if (error instanceof Error) {
         console.log("--------------------------------");
@@ -446,11 +452,11 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
       }
       if (
         error instanceof Error &&
-        error.message.includes("rawResponse is not a string")
+        error.message.includes("Invalid file analysis format")
       ) {
         console.log("--------------------------------");
         console.log(
-          "In generateFileAnalysis catch block rawResponse is not a string"
+          "In generateFileAnalysis catch block Invalid file analysis format"
         );
         console.log("--------------------------------");
         continue;
