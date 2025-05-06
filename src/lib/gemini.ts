@@ -1,7 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { File } from "@prisma/client";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
+import { generateBatchSummarySystemPrompt } from "./prompt.js";
 import {
   getGeminiRequestsThisMinuteRedisKey,
   getGeminiTokensConsumedThisMinuteRedisKey,
@@ -25,16 +26,13 @@ type ParsedSummary = {
 };
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const modelName = "gemini-2.0-flash";
+const model = "gemini-1.5-flash";
 
 if (!GEMINI_API_KEY) {
   throw new Error("Missing GEMINI_API_KEY environment variable.");
 }
 
-const gemini = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = gemini.getGenerativeModel({
-  model: modelName,
-});
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 export async function trackRequest(tokenCount: number) {
   const geminiRequestsCountKey = getGeminiRequestsThisMinuteRedisKey();
@@ -118,68 +116,63 @@ async function handleRequestExceeded() {
   console.log("limitsResponse:", limitsResponse);
   console.log("-------------------------------");
 }
-
 export async function generateBatchSummaries(
   files: { id: string; path: string; content: string | null }[]
 ) {
-  let rawResponse;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 100; i++) {
     try {
       const filePaths = new Set(files.map((file) => file.path));
 
       const prompt = `
-      You are a code assistant.
-      Summarize each of the following files in 1-2 sentences, focusing on its purpose and main functionality. 
-
-      Return your response as a JSON array of objects, ensuring:
-      - Return the summaries as a valid JSON array where each object has 'path' and 'summary' properties.
-      - All keys and values are strings — the entire JSON must be valid for direct parsing with JSON.parse().
-
-      Example response:
-      [
-        {"path": "src/file1.js", "summary": "This file contains utility functions for string manipulation."},
-        {"path": "src/file2.py", "summary": "This script processes CSV data and generates a report."}
-      ]
-
       Files:
       ${files
         .map(
-          (file, index) => `
-            ${index + 1}. path: ${file.path}
-            content:
-            ${file.content}
-          `
+          (file, index) =>
+            `${index + 1}. path: ${
+              file.path
+            }\n   content: ${file.content?.substring(0, 500)}...`
         )
         .join("\n")}
-    `;
+      `;
 
       const tokenCount = await estimateTokenCount(prompt);
 
       await handleRateLimit(tokenCount);
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          systemInstruction: generateBatchSummarySystemPrompt,
           responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                path: { type: Type.STRING },
+                summary: { type: Type.STRING },
+              },
+              required: ["path", "summary"],
+              propertyOrdering: ["path", "summary"],
+            },
+          },
         },
       });
 
-      rawResponse = result.response.text();
-      console.log("rawResponse --generateBatchSummaries : ", rawResponse);
-
-      rawResponse = rawResponse
-        .replace(/^```json\s*/i, "") // Remove ```json or ```mdx at start
-        .replace(/```$/i, "") // Remove ``` at the end
-        .trim();
-
-      const parsedResponse = JSON.parse(rawResponse);
-      console.log("parsedResponse --generateBatchSummaries : ", parsedResponse);
-
-      if (!isValidBatchSummaryResponse(parsedResponse, filePaths)) {
+      if (!response || !response.text) {
         throw new Error("Invalid batch summary response format");
       }
 
-      const summaries: Summary[] = parsedResponse;
+      const result = JSON.parse(response.text);
+
+      console.log("result in generateBatchSummaries is ", result);
+
+      if (!isValidBatchSummaryResponse(result, filePaths)) {
+        throw new Error("Invalid batch summary response format");
+      }
+
+      const summaries: Summary[] = result;
       const parsedSummaries: ParsedSummary[] = summaries.map((summary) => {
         const file = files.find((f) => f.path === summary.path);
         if (!file) {
@@ -199,7 +192,6 @@ export async function generateBatchSummaries(
     } catch (error) {
       if (error instanceof Error) {
         console.log("--------------------------------");
-        console.log("rawResponse is ", rawResponse);
         console.log("error.stack is ", error.stack);
         console.log("error.message is ", error.message);
         console.log("--------------------------------");
@@ -237,7 +229,7 @@ export async function generateBatchSummaries(
 }
 
 export async function generateRepositoryOverview(repositoryId: string) {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 100; i++) {
     try {
       // Fetch all file paths and summaries
       const files = await prisma.file.findMany({
@@ -473,14 +465,7 @@ function isValidBatchSummaryResponse(data: any, filePaths: Set<string>) {
   // Validate each item in the array
   for (const item of data) {
     // Ensure item is an object of type Summary and valid path and not null
-    if (
-      typeof item !== "object" ||
-      item === null ||
-      typeof item.path !== "string" ||
-      typeof item.summary !== "string" ||
-      !filePaths.has(item.path) ||
-      Object.keys(item).length !== 2
-    ) {
+    if (!filePaths.has(item.path) || Object.keys(item).length !== 2) {
       return false;
     }
   }

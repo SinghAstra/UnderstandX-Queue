@@ -8,6 +8,7 @@ import {
   getAnalysisSetRedisKey,
   getAnalysisWorkerCompletedJobsRedisKey,
   getAnalysisWorkerTotalJobsRedisKey,
+  getRepositoryCancelledRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
 import { logQueue } from "../queues/index.js";
@@ -113,6 +114,13 @@ export const analysisWorker = new Worker(
   QUEUES.ANALYSIS,
   async (job) => {
     const { repositoryId, file } = job.data;
+    const isCancelled = await redisClient.get(
+      getRepositoryCancelledRedisKey(repositoryId)
+    );
+    if (isCancelled === "true") {
+      console.log(`❌ Analysis Worker for ${repositoryId} has been cancelled`);
+      return;
+    }
     const analysisSetKey = getAnalysisSetRedisKey(repositoryId);
     const isAlreadyProcessed = await redisClient.sismember(
       analysisSetKey,

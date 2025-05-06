@@ -8,6 +8,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import {
   getAnalysisWorkerTotalJobsRedisKey,
+  getRepositoryCancelledRedisKey,
   getSummaryWorkerCompletedJobsRedisKey,
   getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
@@ -83,6 +84,13 @@ export const summaryWorker = new Worker(
   QUEUES.SUMMARY,
   async (job) => {
     const { repositoryId, files } = job.data;
+    const isCancelled = await redisClient.get(
+      getRepositoryCancelledRedisKey(repositoryId)
+    );
+    if (isCancelled === "true") {
+      console.log(`❌ Summary Worker for ${repositoryId} has been cancelled`);
+      return;
+    }
 
     const summaryWorkerCompletedJobsKey =
       getSummaryWorkerCompletedJobsRedisKey(repositoryId);

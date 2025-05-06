@@ -12,6 +12,7 @@ import { prisma } from "../lib/prisma.js";
 import {
   getDirectoryWorkerCompletedJobsRedisKey,
   getDirectoryWorkerTotalJobsRedisKey,
+  getRepositoryCancelledRedisKey,
   getSummaryWorkerTotalJobsRedisKey,
 } from "../lib/redis-keys.js";
 import redisClient from "../lib/redis.js";
@@ -100,6 +101,13 @@ export const directoryWorker = new Worker(
   QUEUES.DIRECTORY,
   async (job) => {
     const { owner, repo, repositoryId, path } = job.data;
+    const isCancelled = await redisClient.get(
+      getRepositoryCancelledRedisKey(repositoryId)
+    );
+    if (isCancelled === "true") {
+      console.log(`❌ Directory Worker for ${repositoryId} has been cancelled`);
+      return;
+    }
     dirPath = path;
     const directoryWorkerTotalJobsKey =
       getDirectoryWorkerTotalJobsRedisKey(repositoryId);

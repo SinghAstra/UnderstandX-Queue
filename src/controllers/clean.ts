@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { Request, Response } from "express";
-import { cancelAllJobs } from "../lib/cancel-jobs.js";
+import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import redisClient from "../lib/redis.js";
@@ -72,15 +72,8 @@ export const cleanJobs = async (_req: Request, res: Response) => {
 
 export const cleanUserJobs = async (req: Request, res: Response) => {
   try {
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
+    console.log("----------------------------------");
+    console.log("----------------------------------");
     console.log("In Clean User Jobs");
     const userId = req.body.auth.userId;
     console.log("req.body.auth is ", req.body.auth);
@@ -98,22 +91,14 @@ export const cleanUserJobs = async (req: Request, res: Response) => {
 
     repositories.map(async (repository) => {
       console.log("repository.id is ", repository.id);
-      await cancelAllJobs(repository.id);
+      await cancelAllRepositoryJobs(repository.id);
     });
 
     res.status(200).json({
       message: `Successfully cleaned all Jobs `,
     });
-
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
-    console.log(
-      "----------------------------------------------------------------------------"
-    );
+    console.log("----------------------------------");
+    console.log("----------------------------------");
   } catch (error) {
     if (error instanceof Error) {
       console.log("error.stack is ", error.stack);

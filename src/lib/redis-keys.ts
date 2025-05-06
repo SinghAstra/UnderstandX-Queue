@@ -26,6 +26,10 @@ export function getAnalysisSetRedisKey(repositoryId: string) {
   return `${repositoryId}:analysis:files`;
 }
 
+export function getRepositoryCancelledRedisKey(repositoryId: string) {
+  return `${repositoryId}:cancelled`;
+}
+
 export function getGeminiRequestsThisMinuteRedisKey() {
   const now = Date.now();
   const currentMinute = Math.floor(now / 60000);
