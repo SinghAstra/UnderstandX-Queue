@@ -417,6 +417,58 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
             *   List any possible improvements to the code.
         5.  **🔁 Quick Recap:**
             *   📌 Summarize the file’s purpose, structure, and key takeaways in a concise wrap-up.
+
+        
+        ## ✅ Example Output Format:
+
+        \`\`\`mdx
+        # 📄 \`auth.ts\` – Authentication Logic
+
+        ## 📝 Introduction
+
+        This file handles authentication logic in a Next.js API route. It verifies user credentials and generates JWT tokens. It connects to the user database using Prisma and is critical for login functionality.
+
+        ## 🧩 Code Breakdown by Sections
+
+        ### 🔐 Import Dependencies
+        \`\`\`ts
+        import { sign } from 'jsonwebtoken';
+        import prisma from '@/lib/prisma';
+        \`\`\`
+        These imports bring in JWT handling and Prisma client for database queries.
+
+        ### 🔍 Validate Request Body
+        \`\`\`ts
+        if (!req.body.email || !req.body.password) {
+          return res.status(400).json({ error: 'Missing credentials' });
+        }
+        \`\`\`
+        Ensures the client provided both email and password. Could be improved by using a schema validator like Zod.
+
+        ### 🧠 Query User & Compare Password
+        \`\`\`ts
+        const user = await prisma.user.findUnique({ where: { email } });
+        // password comparison logic
+        \`\`\`
+        Fetches user from database. Password should be hashed and compared using bcrypt.
+
+        ## 📜 Key Code
+
+        - \`sign()\` creates a JWT token.
+        - \`prisma.user.findUnique()\` is used to locate the user in the DB.
+
+        ## 🛠️ Possible improvements
+
+        - Use schema validation (e.g., Zod).
+        - Abstract token creation into a separate utility function.
+        - Add rate limiting to prevent brute-force attacks.
+
+        ## 🔁 Quick Recap
+
+        - 📌 This file is the backend auth entry point.
+        - 🧩 Handles input validation, user lookup, and JWT issuance.
+        - 🛠️ Can be improved with better security practices and abstraction.
+        \`\`\`
         
         ### 🎯 Important: Generate the MDX file analysis directly as plain text, ready to use as-is.
         `;
