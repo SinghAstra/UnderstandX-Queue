@@ -20,8 +20,6 @@ export const logWorker = new Worker(
       return;
     }
 
-    console.log("logWorker repositoryId is ", repositoryId);
-
     const log = await prisma.log.create({
       data: {
         repositoryId,

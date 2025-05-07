@@ -215,6 +215,16 @@ export async function generateBatchSummaries(
 
       if (
         error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
+      ) {
+        console.log(`Trying again for ${i + 1} time --generateBatchSummaries`);
+        await handleRequestExceeded();
+        sleep(i + 1);
+        continue;
+      }
+
+      if (
+        error instanceof Error &&
         (error.message.includes("Invalid batch summary response format") ||
           error.stack?.includes("SyntaxError"))
       ) {
@@ -299,6 +309,18 @@ export async function generateRepositoryOverview(repositoryId: string) {
       if (
         error instanceof Error &&
         error.message.includes("GoogleGenerativeAI Error")
+      ) {
+        console.log(
+          `Trying again for ${i + 1} time --generateRepositoryOverview`
+        );
+        await handleRequestExceeded();
+        sleep(i + 1);
+        continue;
+      }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
       ) {
         console.log(
           `Trying again for ${i + 1} time --generateRepositoryOverview`
@@ -411,13 +433,13 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         },
       });
 
-      console.log("response is ", response);
-
       if (!response || !response.text) {
         throw new Error("Invalid file analysis format");
       }
 
       let fileAnalysis = response.text;
+
+      console.log("fileAnalysis is ", fileAnalysis);
 
       fileAnalysis = fileAnalysis.trim();
       // Clean up response
@@ -450,6 +472,17 @@ export async function generateFileAnalysis(repositoryId: string, file: File) {
         sleep(i + 1);
         continue;
       }
+
+      if (
+        error instanceof Error &&
+        error.message.includes("429 Too Many Requests")
+      ) {
+        console.log(`Trying again for ${i + 1} time --generateFileAnalysis`);
+        await handleRequestExceeded();
+        sleep(i + 1);
+        continue;
+      }
+
       if (
         error instanceof Error &&
         error.message.includes("Invalid file analysis format")
