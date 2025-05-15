@@ -264,9 +264,9 @@ export async function generateRepositoryOverview(repositoryId: string) {
       const userPrompt = `
       ## 📦 Project Overview Structure:
 
-      1.  🎯 **Introduction:**  What Problem does this repository solve? What is the Technology Stack?
-      2.  🌟 **Key Features:**  State the project's core functionalities, referencing relevant files where appropriate.
-      3.  🔄 **Data Flow:**  Explain how data flows through the system.
+      1. 🎯 **Introduction:**  What Problem does this repository solve? What is the Technology Stack?
+      2. 🌟 **Key Features:**  State the project's core functionalities, referencing relevant files where appropriate.
+      3. 🔄 **Data Flow:**  Explain how data flows through the system.
       4. ✅ **Conclusion:**  Provide a final summary tying the features and architecture together.
 
       ## 🛠️ File Summaries:
