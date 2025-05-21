@@ -12,6 +12,7 @@ app.use("/api/queue", queueRoutes);
 app.use("/api/clean", cleanRoutes);
 
 app.get("/", (req: Request, res: Response) => {
+  console.log("Request made to / endpoint");
   res.status(200).json({ message: "Service is up" });
 });
 
