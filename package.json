@@ -34,8 +34,6 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch",
     "postinstall": "prisma generate",
     "dev:worker1": "node dist/workers/repository.js --id=1",
     "dev:worker2": "node dist/workers/directory.js --id=2",
@@ -43,7 +41,7 @@
     "dev:worker4": "node dist/workers/analysis.js --id=4",
     "dev:worker5": "node dist/workers/log.js --id=5",
     "dev:server": "node dist/index.js",
-    "dev": "concurrently \"npm run watch\" \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\" \"npm run dev:worker4\"  \"npm run dev:worker5\" "
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\" \"npm run dev:worker4\"  \"npm run dev:worker5\" "
   },
   "keywords": [],
   "author": "",
