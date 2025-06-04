@@ -45,7 +45,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:worker1\" \"npm run dev:worker2\" \"npm run dev:worker3\" \"npm run dev:worker4\"  \"npm run dev:worker5\" "
   },
   "keywords": [],
-  "author": "",
+  "author": "SinghAstra",
   "license": "ISC",
   "description": "",
   "devDependencies": {
