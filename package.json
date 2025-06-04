@@ -34,6 +34,7 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "build": "tsc",
     "postinstall": "prisma generate",
     "dev:worker1": "node dist/workers/repository.js --id=1",
     "dev:worker2": "node dist/workers/directory.js --id=2",
