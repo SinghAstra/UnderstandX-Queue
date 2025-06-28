@@ -4,8 +4,8 @@ import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { CONCURRENT_WORKERS, QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
-import { getRepositoryCancelledRedisKey } from "../lib/redis-keys.js";
-import redisClient from "../lib/redis.js";
+import { getRepositoryCancelledRedisKey } from "../lib/redis/redis-keys.js";
+import redisClient from "../lib/redis/redis.js";
 
 export const logWorker = new Worker(
   QUEUES.LOG,

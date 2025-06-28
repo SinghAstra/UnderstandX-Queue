@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
-import redisClient from "./lib/redis.js";
+import redisClient from "./lib/redis/redis.js";
 import cleanRoutes from "./routes/clean.js";
 import queueRoutes from "./routes/queue.js";
 

@@ -4,13 +4,14 @@ import { ANALYSIS_WORKERS, QUEUES } from "../lib/constants.js";
 import { generateFileAnalysis } from "../lib/gemini.js";
 import { prisma } from "../lib/prisma.js";
 
+import { checkCompletion } from "../lib/redis/atomic-operation.js";
 import {
   getAnalysisSetRedisKey,
   getAnalysisWorkerCompletedJobsRedisKey,
   getAnalysisWorkerTotalJobsRedisKey,
   getRepositoryCancelledRedisKey,
-} from "../lib/redis-keys.js";
-import redisClient from "../lib/redis.js";
+} from "../lib/redis/redis-keys.js";
+import redisClient from "../lib/redis/redis.js";
 import { logQueue } from "../queues/index.js";
 
 async function updateRepositoryStatus(repositoryId: string) {
@@ -18,6 +19,18 @@ async function updateRepositoryStatus(repositoryId: string) {
     getAnalysisWorkerTotalJobsRedisKey(repositoryId);
   const analysisWorkerCompletedJobsKey =
     getAnalysisWorkerCompletedJobsRedisKey(repositoryId);
+
+  // Use atomic check - only one worker will get true when all summaries are complete
+  const allAnalysisComplete = await checkCompletion(
+    analysisWorkerCompletedJobsKey,
+    analysisWorkerTotalJobsKey
+  );
+
+  if (allAnalysisComplete) {
+    console.log("-------------------------------------------------------");
+    console.log("All analysis workers completed ");
+    console.log("-------------------------------------------------------");
+  }
 
   const analysisWorkerTotalJobs = await redisClient.get(
     analysisWorkerTotalJobsKey

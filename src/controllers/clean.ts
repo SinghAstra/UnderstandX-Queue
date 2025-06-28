@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
-import redisClient from "../lib/redis.js";
+import redisClient from "../lib/redis/redis.js";
 
 export const cleanJobs = async (_req: Request, res: Response) => {
   try {

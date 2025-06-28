@@ -6,8 +6,8 @@ import { prisma } from "../lib/prisma.js";
 import {
   getDirectoryWorkerCompletedJobsRedisKey,
   getDirectoryWorkerTotalJobsRedisKey,
-} from "../lib/redis-keys.js";
-import redisClient from "../lib/redis.js";
+} from "../lib/redis/redis-keys.js";
+import redisClient from "../lib/redis/redis.js";
 import { directoryQueue, logQueue } from "../queues/index.js";
 
 export const repositoryWorker = new Worker(
@@ -42,8 +42,11 @@ export const repositoryWorker = new Worker(
         path: "",
       });
 
-      await redisClient.set(directoryWorkerTotalJobsRedisKey, 1);
-      await redisClient.set(directoryWorkerCompletedJobsRedisKey, 0);
+      await redisClient
+        .multi()
+        .set(directoryWorkerTotalJobsRedisKey, 1)
+        .set(directoryWorkerCompletedJobsRedisKey, 0)
+        .exec();
 
       await directoryQueue.add(QUEUES.DIRECTORY, {
         owner,

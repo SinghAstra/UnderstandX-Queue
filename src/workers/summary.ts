@@ -6,13 +6,14 @@ import {
   generateRepositoryOverview,
 } from "../lib/gemini.js";
 import { prisma } from "../lib/prisma.js";
+import { checkCompletion } from "../lib/redis/atomic-operation.js";
 import {
   getAnalysisWorkerTotalJobsRedisKey,
   getRepositoryCancelledRedisKey,
   getSummaryWorkerCompletedJobsRedisKey,
   getSummaryWorkerTotalJobsRedisKey,
-} from "../lib/redis-keys.js";
-import redisClient from "../lib/redis.js";
+} from "../lib/redis/redis-keys.js";
+import redisClient from "../lib/redis/redis.js";
 import { analysisQueue, logQueue } from "../queues/index.js";
 
 async function generateRepoOverview(repositoryId: string) {
@@ -23,23 +24,21 @@ async function generateRepoOverview(repositoryId: string) {
   const analysisWorkerTotalJobsKey =
     getAnalysisWorkerTotalJobsRedisKey(repositoryId);
 
-  const summaryWorkerTotalJobs = await redisClient.get(
+  console.log("🔍 Redis keys in generateRepoOverview:", {
+    summaryWorkerTotalJobsKey,
+    summaryWorkerCompletedJobsKey,
+    analysisWorkerTotalJobsKey,
+  });
+
+  // Use atomic check - only one worker will get true when all summaries are complete
+  const allSummariesComplete = await checkCompletion(
+    summaryWorkerCompletedJobsKey,
     summaryWorkerTotalJobsKey
   );
-  const summaryWorkerCompletedJobs = await redisClient.get(
-    summaryWorkerCompletedJobsKey
-  );
 
-  console.log("-------------------------------------------------------");
-  console.log("summaryWorkerTotalJobs is ", summaryWorkerTotalJobs);
-  console.log("summaryWorkerCompletedJobs is ", summaryWorkerCompletedJobs);
-  console.log("-------------------------------------------------------");
-
-  if (summaryWorkerCompletedJobs === summaryWorkerTotalJobs) {
+  if (allSummariesComplete) {
     console.log("-------------------------------------------------------");
-    console.log(
-      "Inside the if of summaryWorkerCompletedJobs === summaryWorkerTotalJobs"
-    );
+    console.log("All summary workers completed - starting overview generation");
     console.log("-------------------------------------------------------");
 
     await logQueue.add(
