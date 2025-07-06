@@ -1,10 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "./generated/prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -96,8 +97,8 @@ model File {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   repositoryId String
-  shortSummary String?
   analysis     String?
+  shortSummary String?
   directory    Directory? @relation(fields: [directoryId], references: [id], onDelete: Cascade)
   repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }

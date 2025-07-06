@@ -13,7 +13,6 @@ app.use("/api/queue", queueRoutes);
 app.use("/api/clean", cleanRoutes);
 
 app.get("/", async (req: Request, res: Response) => {
-  console.log("Request made to / endpoint");
   try {
     const pong = await redisClient.ping();
     res.status(200).json({
