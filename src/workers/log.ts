@@ -1,11 +1,11 @@
 import { RepositoryStatus } from "@prisma/client";
 import { Worker } from "bullmq";
-import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { CONCURRENT_WORKERS, QUEUES } from "../lib/constants.js";
 import { prisma } from "../lib/prisma.js";
 import { sendProcessingUpdate } from "../lib/pusher/send-update.js";
 import { getRepositoryCancelledRedisKey } from "../lib/redis/redis-keys.js";
 import redisClient from "../lib/redis/redis.js";
+import { cancelAllRepositoryJobs } from "../queues/cancel-jobs.js";
 
 export const logWorker = new Worker(
   QUEUES.LOG,

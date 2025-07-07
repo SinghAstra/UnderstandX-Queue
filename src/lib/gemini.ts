@@ -8,11 +8,7 @@ import {
   generateOverviewSystemPrompt,
 } from "./prompt.js";
 import { checkAndIncrementRateLimit } from "./redis/atomic-operation.js";
-import {
-  getGeminiRequestsThisMinuteRedisKey,
-  getGeminiTokensConsumedThisMinuteRedisKey,
-} from "./redis/redis-keys.js";
-import redisClient from "./redis/redis.js";
+import { getGeminiRequestsThisMinuteRedisKey } from "./redis/redis-keys.js";
 
 dotenv.config();
 
