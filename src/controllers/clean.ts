@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { cancelAllRepositoryJobs } from "../lib/cancel-jobs.js";
 import { prisma } from "../lib/prisma.js";
+import { cancelAllRepositoryJobs } from "../queues/cancel-jobs.js";
 
 export const cleanUserJobs = async (req: Request, res: Response) => {
   try {
