@@ -243,12 +243,22 @@ export async function generateRepositoryOverview(repositoryId: string) {
         },
       });
 
-      const repositoryOverview = response.text;
+      let repositoryOverview = response.text;
 
       console.log("repositoryOverview is ", repositoryOverview);
 
-      if (!response || !response.text) {
+      if (!repositoryOverview) {
         throw new Error("Invalid repository overview format");
+      }
+
+      repositoryOverview = repositoryOverview.trim();
+      // Clean up response
+      if (repositoryOverview.startsWith("```mdx")) {
+        console.log("Inside repositoryOverview starts with ```mdx");
+        repositoryOverview = repositoryOverview
+          .replace(/^```(mdx)\s*/, "")
+          .replace(/```$/, "")
+          .trim();
       }
 
       return repositoryOverview;
